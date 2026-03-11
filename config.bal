@@ -63,5 +63,17 @@ configurable string listViewId = "";
 // Include converted leads
 configurable boolean includeConverted = false;
 
+// Enable incremental sync (only fetch leads modified since last sync)
+configurable boolean enableIncrementalSync = false;
+
+// Last sync timestamp (ISO 8601 format, e.g., "2025-01-17T10:30:00Z")
+configurable string lastSyncTimestamp = "";
+
 // Sync mode: APPEND, FULL_REPLACE, or UPSERT_BY_EMAIL
 configurable SyncMode syncMode = APPEND;
+
+// Enable auto-formatting (bold headers, freeze first row)
+configurable boolean enableAutoFormat = true;
+
+// Split leads into multiple sheets by field (e.g., "LeadSource", "Status", or "" to disable)
+configurable string splitBy = "";

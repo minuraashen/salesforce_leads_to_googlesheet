@@ -16,6 +16,13 @@
 
 import ballerina/time;
 
+// Get current timestamp in ISO 8601 format for incremental sync
+public function getCurrentTimestamp() returns string|error {
+    time:Utc currentUtc = time:utcNow();
+    time:Civil currentCivil = time:utcToCivil(currentUtc);
+    return string `${currentCivil.year}-${currentCivil.month.toString().padZero(2)}-${currentCivil.day.toString().padZero(2)}T${currentCivil.hour.toString().padZero(2)}:${currentCivil.minute.toString().padZero(2)}:${currentCivil.second.toString().padZero(2)}Z`;
+}
+
 // Get formatted current timestamp in the configured timezone
 public function getFormattedCurrentTimeStamp() returns string|error {
     time:Zone? zone = time:getZone(timezone);
@@ -63,10 +70,20 @@ public function buildSoqlQuery() returns string|error {
         }
     }
     
+    // Add incremental sync filter if enabled
+    if enableIncrementalSync && lastSyncTimestamp != "" {
+        whereConditions.push(string `LastModifiedDate > ${lastSyncTimestamp}`);
+    }
+    
     // Combine WHERE conditions
     if whereConditions.length() > 0 {
         string whereClause = string:'join(" AND ", ...whereConditions);
         query = string `${query} WHERE ${whereClause}`;
+    }
+    
+    // Add ORDER BY for incremental sync
+    if enableIncrementalSync {
+        query = string `${query} ORDER BY LastModifiedDate ASC`;
     }
     
     return query;

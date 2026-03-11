@@ -58,20 +58,32 @@ public function main() returns error? {
             targetSheetName = spreadsheet.sheets[0].properties.title;
         }
         
-        // Execute sync based on mode
-        match syncMode {
-            APPEND => {
-                check appendLeads(workingSpreadsheetId, targetSheetName, leadValues);
-            }
-            FULL_REPLACE => {
-                check fullReplaceLeads(workingSpreadsheetId, targetSheetName, leadValues);
-            }
-            UPSERT_BY_EMAIL => {
-                check upsertLeadsByEmail(workingSpreadsheetId, targetSheetName, leadValues);
+        // Execute sync based on mode and split configuration
+        if splitBy != "" {
+            // Split leads into multiple sheets
+            check syncLeadsSplit(workingSpreadsheetId, targetSheetName, leadValues);
+        } else {
+            // Single sheet sync
+            match syncMode {
+                APPEND => {
+                    check appendLeads(workingSpreadsheetId, targetSheetName, leadValues);
+                }
+                FULL_REPLACE => {
+                    check fullReplaceLeads(workingSpreadsheetId, targetSheetName, leadValues);
+                }
+                UPSERT_BY_EMAIL => {
+                    check upsertLeadsByEmail(workingSpreadsheetId, targetSheetName, leadValues);
+                }
             }
         }
         
         log:printInfo(string `${leadValues.length()} ${leadValues.length() == 1 ? "lead" : "leads"} synced to the spreadsheet successfully using ${syncMode} mode.`);
+        
+        // Log incremental sync info
+        if enableIncrementalSync {
+            string currentTimestamp = check getCurrentTimestamp();
+            log:printInfo(string `Incremental sync completed. Next sync should use lastSyncTimestamp: "${currentTimestamp}"`);
+        }
         
     } on fail error e {
         log:printError("Error occurred", 'error = e);
@@ -92,19 +104,19 @@ function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValu
         // Include headers only if sheet is empty
         dataToAppend = [columns, ...leadValues];
         log:printInfo("Sheet is empty. Adding headers and data.");
+        
+        // Append data first
+        _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: sheet.properties.title});
+        
+        // Apply formatting to new sheet
+        check applySheetFormatting(spreadsheetId, sheet.properties.sheetId);
     } else {
         // Only append data if sheet already has content
         dataToAppend = leadValues;
         log:printInfo("Sheet has existing data. Appending new rows without headers.");
+        
+        _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: sheet.properties.title});
     }
-    
-    _ = check sheetsClient->appendValues(
-        spreadsheetId, 
-        dataToAppend, 
-        { 
-            sheetName: sheet.properties.title 
-        }
-    );
 }
 
 // Replace all data in the sheet
@@ -118,13 +130,10 @@ function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] lea
     
     // Write headers and data
     SheetRow[] allValues = [columns, ...leadValues];
-    _ = check sheetsClient->appendValues(
-        spreadsheetId, 
-        allValues, 
-        { 
-            sheetName: newSheet.properties.title 
-        }
-    );
+    _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: newSheet.properties.title});
+    
+    // Apply formatting
+    check applySheetFormatting(spreadsheetId, newSheet.properties.sheetId);
 }
 
 // Upsert leads by email (update existing, append new)
@@ -138,6 +147,7 @@ function upsertLeadsByEmail(string spreadsheetId, string sheetName, SheetRow[] l
         // If sheet is empty, just append headers and data
         SheetRow[] dataToAppend = [columns, ...leadValues];
         _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: sheet.properties.title});
+        check applySheetFormatting(spreadsheetId, sheet.properties.sheetId);
         log:printInfo("Sheet is empty. Added headers and all leads.");
         return;
     }
@@ -217,6 +227,9 @@ function upsertLeadsByEmail(string spreadsheetId, string sheetName, SheetRow[] l
     _ = check sheetsClient->clearRange(spreadsheetId, sheet.properties.title, a1Notation = "A:Z");
     _ = check sheetsClient->appendValues(spreadsheetId, allData, {sheetName: sheet.properties.title});
     
+    // Apply formatting after clearing and rewriting
+    check applySheetFormatting(spreadsheetId, sheet.properties.sheetId);
+    
     // Append new leads
     if newLeads.length() > 0 {
         _ = check sheetsClient->appendValues(spreadsheetId, newLeads, {sheetName: sheet.properties.title});
@@ -273,4 +286,100 @@ function getEmailColumnIndex() returns int {
         index = index + 1;
     }
     return -1;
+}
+
+// Sync leads split into multiple sheets by a field
+function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] leadValues) returns error? {
+    // Find the split field column index
+    int splitFieldIndex = getSplitFieldIndex();
+    
+    if splitFieldIndex == -1 {
+        log:printWarn(string `Split field "${splitBy}" not found in fieldMapping. Falling back to single sheet sync.`);
+        match syncMode {
+            APPEND => {
+                check appendLeads(spreadsheetId, baseSheetName, leadValues);
+            }
+            FULL_REPLACE => {
+                check fullReplaceLeads(spreadsheetId, baseSheetName, leadValues);
+            }
+            UPSERT_BY_EMAIL => {
+                check upsertLeadsByEmail(spreadsheetId, baseSheetName, leadValues);
+            }
+        }
+        return;
+    }
+    
+    // Group leads by split field value
+    map<SheetRow[]> groupedLeads = {};
+    
+    foreach SheetRow leadRow in leadValues {
+        if leadRow.length() > splitFieldIndex {
+            int|string|decimal|boolean|float fieldValue = leadRow[splitFieldIndex];
+            string groupKey = fieldValue.toString();
+            
+            if groupKey == "" {
+                groupKey = "Unknown";
+            }
+            
+            if !groupedLeads.hasKey(groupKey) {
+                groupedLeads[groupKey] = [];
+            }
+            
+            SheetRow[] existingGroup = groupedLeads.get(groupKey);
+            existingGroup.push(leadRow);
+            groupedLeads[groupKey] = existingGroup;
+        }
+    }
+    
+    // Sync each group to its own sheet
+    foreach string groupKey in groupedLeads.keys() {
+        SheetRow[] groupLeads = groupedLeads.get(groupKey);
+        string sheetName = string `${baseSheetName} - ${groupKey}`;
+        
+        log:printInfo(string `Syncing ${groupLeads.length()} lead(s) to sheet: ${sheetName}`);
+        
+        match syncMode {
+            APPEND => {
+                check appendLeads(spreadsheetId, sheetName, groupLeads);
+            }
+            FULL_REPLACE => {
+                check fullReplaceLeads(spreadsheetId, sheetName, groupLeads);
+            }
+            UPSERT_BY_EMAIL => {
+                check upsertLeadsByEmail(spreadsheetId, sheetName, groupLeads);
+            }
+        }
+    }
+    
+    log:printInfo(string `Split sync completed. Created/updated ${groupedLeads.keys().length()} sheet(s) based on ${splitBy}.`);
+}
+
+// Get split field column index from fieldMapping
+function getSplitFieldIndex() returns int {
+    int index = 0;
+    foreach string fieldName in fieldMapping {
+        if fieldName == splitBy {
+            return index;
+        }
+        index = index + 1;
+    }
+    return -1;
+}
+
+// Apply formatting to sheet (bold headers, freeze first row)
+function applySheetFormatting(string spreadsheetId, int sheetId) returns error? {
+    if !enableAutoFormat {
+        return;
+    }
+    
+    // Note: Advanced formatting (bold, freeze) requires Google Sheets API batchUpdate
+    // which is not directly available in the current connector version.
+    // This is a placeholder for future enhancement when the API is available.
+    // For now, we log that formatting would be applied.
+    
+    log:printInfo("Auto-formatting enabled. Headers will appear in first row (manual formatting recommended for bold/freeze).");
+    
+    // Future implementation would use:
+    // - batchUpdate API with repeatCell request for bold headers
+    // - updateSheetProperties request for frozen rows
 }

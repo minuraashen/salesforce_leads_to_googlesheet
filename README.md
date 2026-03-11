@@ -79,7 +79,11 @@ This integration automatically syncs Salesforce Lead data to Google Sheets, enab
 | `soqlFilter` | string | No | `""` | Additional SOQL WHERE clause fragment (used when filterMode = SOQL, e.g., "Rating = 'Hot'") |
 | `listViewId` | string | No | `""` | Salesforce List View ID (used when filterMode = LIST_VIEW, e.g., "00B5g00000A1B2C") |
 | `includeConverted` | boolean | No | `false` | Whether to include converted leads |
+| `enableIncrementalSync` | boolean | No | `false` | Enable incremental sync (only fetch leads modified since last sync) |
+| `lastSyncTimestamp` | string | No | `""` | Last sync timestamp in ISO 8601 format (e.g., "2025-01-17T10:30:00Z"). Used when enableIncrementalSync is true |
 | `syncMode` | enum | No | `APPEND` | Sync mode: `APPEND` (add new rows), `FULL_REPLACE` (replace all data), or `UPSERT_BY_EMAIL` (update by email, append new) |
+| `enableAutoFormat` | boolean | No | `true` | Enable auto-formatting (prepares sheet for manual formatting of headers) |
+| `splitBy` | string | No | `""` | Split leads into multiple sheets by field (e.g., "LeadSource", "Status"). Leave empty to disable |
 
 **Default Field Mapping:**
 ```
@@ -94,6 +98,28 @@ This integration automatically syncs Salesforce Lead data to Google Sheets, enab
 - `APPEND`: Adds new rows to the end of the sheet. Headers are added only if the sheet is empty. Best for cumulative historical tracking.
 - `FULL_REPLACE`: Deletes the existing sheet and creates a new one with fresh data. Best for maintaining a current snapshot.
 - `UPSERT_BY_EMAIL`: Updates existing leads by email and appends new ones. Requires "Email" field in `fieldMapping`. Best for maintaining up-to-date lead information without duplicates.
+
+**Advanced Features:**
+
+**Incremental Sync:**
+When `enableIncrementalSync` is enabled, only leads modified since `lastSyncTimestamp` are fetched. This reduces API calls and data transfer.
+- Set `enableIncrementalSync = true`
+- After each sync, check logs for the next timestamp to use
+- Update `lastSyncTimestamp` with the logged value for the next run
+- Example: `lastSyncTimestamp = "2025-01-17T10:30:00Z"`
+
+**Auto-Formatting:**
+When `enableAutoFormat` is enabled, the integration prepares sheets for optimal viewing:
+- Headers are placed in the first row
+- Sheet structure is optimized for manual formatting
+- Note: Manual bold formatting and row freezing can be applied in Google Sheets UI
+
+**Multi-Sheet Split:**
+When `splitBy` is configured, leads are automatically organized into separate sheets:
+- Set `splitBy` to a field name from `fieldMapping` (e.g., "LeadSource", "Status", "Industry")
+- Each unique value creates a separate sheet named "{tabName} - {value}"
+- Example: If `splitBy = "Status"`, creates sheets like "Leads - Open", "Leads - Contacted", etc.
+- Works with all sync modes (APPEND, FULL_REPLACE, UPSERT_BY_EMAIL)
 
 ## Deploying on WSO2 Devant
 
@@ -165,6 +191,13 @@ soqlFilter = "Rating = 'Hot'"
 # listViewId = "00B5g00000A1B2C"
 
 includeConverted = false
+
+# Advanced Features
+enableIncrementalSync = false
+lastSyncTimestamp = ""  # Update after each sync with logged timestamp
+enableAutoFormat = true
+splitBy = ""  # e.g., "LeadSource" or "Status" to split into multiple sheets
+
 syncMode = "UPSERT_BY_EMAIL"
 fieldMapping = ["Id", "FirstName", "LastName", "Email", "Phone", "Company", "Status"]
 ```

@@ -14,12 +14,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-type Attributes record {|
+public type Attributes record {|
     string? 'type;
     string? url;
 |};
 
-type Lead record {
+public type Lead record {
     Attributes? attributes?;
     string? Id?;
     string? FirstName?;
