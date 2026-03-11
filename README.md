@@ -75,7 +75,9 @@ This integration automatically syncs Salesforce Lead data to Google Sheets, enab
 | `tabName` | string | No | `"Leads"` | Target sheet tab name within the spreadsheet |
 | `timezone` | string | No | `"UTC"` | IANA timezone string for spreadsheet timestamp naming (e.g., "America/New_York", "Asia/Colombo") |
 | `fieldMapping` | string[] | No | See below | Ordered list of Salesforce Lead field API names to export |
-| `soqlFilter` | string | No | `""` | Additional SOQL WHERE clause fragment (e.g., "Rating = 'Hot'") |
+| `filterMode` | enum | No | `SOQL` | Lead filter mode: `SOQL` (use SOQL filter) or `LIST_VIEW` (use Salesforce List View ID) |
+| `soqlFilter` | string | No | `""` | Additional SOQL WHERE clause fragment (used when filterMode = SOQL, e.g., "Rating = 'Hot'") |
+| `listViewId` | string | No | `""` | Salesforce List View ID (used when filterMode = LIST_VIEW, e.g., "00B5g00000A1B2C") |
 | `includeConverted` | boolean | No | `false` | Whether to include converted leads |
 | `syncMode` | enum | No | `APPEND` | Sync mode: `APPEND` (add new rows), `FULL_REPLACE` (replace all data), or `UPSERT_BY_EMAIL` (update by email, append new) |
 
@@ -84,10 +86,14 @@ This integration automatically syncs Salesforce Lead data to Google Sheets, enab
 ["Id", "FirstName", "LastName", "Email", "Phone", "Company", "Title", "Status", "LeadSource", "Industry", "Rating", "CreatedDate", "LastModifiedDate"]
 ```
 
+**Filter Modes:**
+- `SOQL`: Use custom SOQL WHERE clause via `soqlFilter` parameter. Provides maximum flexibility for complex queries.
+- `LIST_VIEW`: Use existing Salesforce List View via `listViewId` parameter. Easier for non-technical users who have pre-configured List Views.
+
 **Sync Modes:**
-- `APPEND`: Adds new rows to the end of the sheet. Headers are added if the sheet is new. Best for cumulative historical tracking.
+- `APPEND`: Adds new rows to the end of the sheet. Headers are added only if the sheet is empty. Best for cumulative historical tracking.
 - `FULL_REPLACE`: Deletes the existing sheet and creates a new one with fresh data. Best for maintaining a current snapshot.
-- `UPSERT_BY_EMAIL`: *(Simplified implementation)* Currently behaves like APPEND. For true upsert functionality, consider using FULL_REPLACE mode.
+- `UPSERT_BY_EMAIL`: Updates existing leads by email and appends new ones. Requires "Email" field in `fieldMapping`. Best for maintaining up-to-date lead information without duplicates.
 
 ## Deploying on WSO2 Devant
 
@@ -149,9 +155,17 @@ clientSecret = "your_google_client_secret"
 spreadsheetId = "1abc123xyz456"
 tabName = "Hot Leads"
 timezone = "America/New_York"
+
+# Option 1: Use SOQL filter
+filterMode = "SOQL"
 soqlFilter = "Rating = 'Hot'"
+
+# Option 2: Use List View (comment out SOQL option above)
+# filterMode = "LIST_VIEW"
+# listViewId = "00B5g00000A1B2C"
+
 includeConverted = false
-syncMode = "APPEND"
+syncMode = "UPSERT_BY_EMAIL"
 fieldMapping = ["Id", "FirstName", "LastName", "Email", "Phone", "Company", "Status"]
 ```
 

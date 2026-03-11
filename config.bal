@@ -51,8 +51,14 @@ configurable string[] fieldMapping = [
     "LastModifiedDate"
 ];
 
-// Additional SOQL WHERE clause fragment
+// Lead filter mode: SOQL or LIST_VIEW
+configurable LeadFilterMode filterMode = SOQL;
+
+// Additional SOQL WHERE clause fragment (used when filterMode = SOQL)
 configurable string soqlFilter = "";
+
+// Salesforce List View ID (used when filterMode = LIST_VIEW)
+configurable string listViewId = "";
 
 // Include converted leads
 configurable boolean includeConverted = false;

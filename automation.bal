@@ -22,7 +22,7 @@ SheetRow columns = fieldMapping;
 public function main() returns error? {
     do {
         // Build and log SOQL query
-        string soqlQuery = buildSoqlQuery();
+        string soqlQuery = check buildSoqlQuery();
         log:printInfo("Executing SOQL query: " + soqlQuery);
         
         // Execute Salesforce query
@@ -84,8 +84,19 @@ function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValu
     // Check if sheet exists, if not create it
     sheets:Sheet sheet = check getOrCreateSheet(spreadsheetId, sheetName);
     
-    // Always include headers when appending
-    SheetRow[] dataToAppend = [columns, ...leadValues];
+    // Check if sheet is empty by trying to get values
+    boolean sheetEmpty = check isSheetEmpty(spreadsheetId, sheet.properties.title);
+    
+    SheetRow[] dataToAppend;
+    if sheetEmpty {
+        // Include headers only if sheet is empty
+        dataToAppend = [columns, ...leadValues];
+        log:printInfo("Sheet is empty. Adding headers and data.");
+    } else {
+        // Only append data if sheet already has content
+        dataToAppend = leadValues;
+        log:printInfo("Sheet has existing data. Appending new rows without headers.");
+    }
     
     _ = check sheetsClient->appendValues(
         spreadsheetId, 
@@ -118,24 +129,100 @@ function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] lea
 
 // Upsert leads by email (update existing, append new)
 function upsertLeadsByEmail(string spreadsheetId, string sheetName, SheetRow[] leadValues) returns error? {
-    // For UPSERT, we'll use a simpler approach:
-    // 1. Get all existing data
-    // 2. Build a map of email -> row data
-    // 3. Merge new data
-    // 4. Replace the sheet with merged data
-    
     sheets:Sheet sheet = check getOrCreateSheet(spreadsheetId, sheetName);
     
-    // Try to get existing data - if sheet is empty, just append
-    _ = check sheetsClient->appendValues(
-        spreadsheetId, 
-        [columns, ...leadValues], 
-        { 
-            sheetName: sheet.properties.title 
-        }
-    );
+    // Check if sheet is empty
+    boolean isEmpty = check isSheetEmpty(spreadsheetId, sheet.properties.title);
     
-    log:printWarn("UPSERT_BY_EMAIL mode is simplified to APPEND in this implementation. For true upsert, consider using FULL_REPLACE mode.");
+    if isEmpty {
+        // If sheet is empty, just append headers and data
+        SheetRow[] dataToAppend = [columns, ...leadValues];
+        _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: sheet.properties.title});
+        log:printInfo("Sheet is empty. Added headers and all leads.");
+        return;
+    }
+    
+    // Get existing data from sheet
+    sheets:Range existingRange = check sheetsClient->getRange(spreadsheetId, sheet.properties.title, a1Notation = "A:Z");
+    (int|string|decimal)[][] existingValues = existingRange.values;
+    
+    if existingValues.length() <= 1 {
+        // Only headers exist, append all data
+        _ = check sheetsClient->appendValues(spreadsheetId, leadValues, {sheetName: sheet.properties.title});
+        log:printInfo("Only headers found. Appended all leads.");
+        return;
+    }
+    
+    // Find email column index
+    int emailColumnIndex = getEmailColumnIndex();
+    
+    if emailColumnIndex == -1 {
+        log:printWarn("Email field not found in fieldMapping. Falling back to APPEND mode.");
+        _ = check sheetsClient->appendValues(spreadsheetId, leadValues, {sheetName: sheet.properties.title});
+        return;
+    }
+    
+    // Build map of existing emails to row data and indices
+    map<SheetRow> emailToRowData = {};
+    map<int> emailToRowIndex = {};
+    
+    int rowIndex = 1;
+    foreach (int|string|decimal)[] row in existingValues.slice(1) {
+        if row.length() > emailColumnIndex {
+            (int|string|decimal) emailValue = row[emailColumnIndex];
+            string email = emailValue.toString();
+            if email != "" {
+                SheetRow convertedRow = [];
+                foreach (int|string|decimal) cell in row {
+                    convertedRow.push(cell);
+                }
+                emailToRowData[email] = convertedRow;
+                emailToRowIndex[email] = rowIndex;
+            }
+        }
+        rowIndex = rowIndex + 1;
+    }
+    
+    // Process new leads: update existing or collect new ones
+    SheetRow[] newLeads = [];
+    int updatedCount = 0;
+    
+    foreach SheetRow leadRow in leadValues {
+        if leadRow.length() > emailColumnIndex {
+            int|string|decimal|boolean|float emailValue = leadRow[emailColumnIndex];
+            string email = emailValue.toString();
+            
+            if email != "" && emailToRowData.hasKey(email) {
+                // Update existing row data in map
+                emailToRowData[email] = leadRow;
+                updatedCount = updatedCount + 1;
+            } else {
+                // Collect new lead for appending
+                newLeads.push(leadRow);
+            }
+        } else {
+            // No email, append as new
+            newLeads.push(leadRow);
+        }
+    }
+    
+    // Rebuild all data with updates
+    SheetRow[] allData = [columns];
+    foreach string email in emailToRowData.keys() {
+        SheetRow rowData = emailToRowData.get(email);
+        allData.push(rowData);
+    }
+    
+    // Clear sheet and write updated data
+    _ = check sheetsClient->clearRange(spreadsheetId, sheet.properties.title, a1Notation = "A:Z");
+    _ = check sheetsClient->appendValues(spreadsheetId, allData, {sheetName: sheet.properties.title});
+    
+    // Append new leads
+    if newLeads.length() > 0 {
+        _ = check sheetsClient->appendValues(spreadsheetId, newLeads, {sheetName: sheet.properties.title});
+    }
+    
+    log:printInfo(string `UPSERT completed: ${updatedCount} lead(s) updated, ${newLeads.length()} new lead(s) added.`);
 }
 
 // Get existing sheet or create new one
@@ -151,4 +238,39 @@ function getOrCreateSheet(string spreadsheetId, string sheetName) returns sheets
     
     // Sheet doesn't exist, create it
     return check sheetsClient->addSheet(spreadsheetId, sheetName);
+}
+
+// Check if sheet is empty
+function isSheetEmpty(string spreadsheetId, string sheetName) returns boolean|error {
+    sheets:Range|error result = sheetsClient->getRange(spreadsheetId, sheetName, "A1:A1");
+    
+    if result is error {
+        // If error occurs, assume sheet is empty
+        return true;
+    }
+    
+    sheets:Range range = result;
+    // Check if values array is empty or first cell is empty
+    if range.values.length() == 0 {
+        return true;
+    }
+    
+    (int|string|decimal)[] firstRow = range.values[0];
+    if firstRow.length() == 0 {
+        return true;
+    }
+    
+    return false;
+}
+
+// Get email column index from fieldMapping
+function getEmailColumnIndex() returns int {
+    int index = 0;
+    foreach string fieldName in fieldMapping {
+        if fieldName == "Email" {
+            return index;
+        }
+        index = index + 1;
+    }
+    return -1;
 }
