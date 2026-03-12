@@ -54,3 +54,6 @@ enum SyncMode {
     FULL_REPLACE,
     UPSERT_BY_EMAIL
 }
+
+// TimeFrame enum removed - now using string type for better UI compatibility
+// Valid timeframe values: "ALL", "YESTERDAY", "LAST_WEEK", "LAST_MONTH", "LAST_YEAR"

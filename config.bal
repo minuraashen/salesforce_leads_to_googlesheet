@@ -53,6 +53,10 @@ configurable string[] fieldMapping = [
 // Additional SOQL WHERE clause fragment for filtering leads
 configurable string soqlFilter = "";
 
+// Timeframe filter for leads (based on CreatedDate)
+// Valid values: "ALL", "YESTERDAY", "LAST_WEEK", "LAST_MONTH", "LAST_YEAR"
+configurable string timeframe = "ALL";
+
 // Include converted leads
 configurable boolean includeConverted = false;
 

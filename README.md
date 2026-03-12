@@ -95,6 +95,7 @@ https://docs.google.com/spreadsheets/d/1abc123xyz456def789ghi012jkl345mno678pqr/
 | `timezone` | string | No | `"UTC"` | IANA timezone string for spreadsheet timestamp naming (e.g., "America/New_York", "Asia/Colombo") |
 | `fieldMapping` | string[] | No | See below | Ordered list of Salesforce Lead field API names to export |
 | `soqlFilter` | string | No | `""` | Additional SOQL WHERE clause fragment for filtering leads (e.g., "Rating = 'Hot' AND LeadSource = 'Web'") |
+| `timeframe` | string | No | `"ALL"` | Timeframe filter based on CreatedDate. Options: `"ALL"`, `"YESTERDAY"`, `"LAST_WEEK"`, `"LAST_MONTH"`, `"LAST_YEAR"` |
 | `includeConverted` | boolean | No | `false` | Whether to include converted leads |
 | `enableIncrementalSync` | boolean | No | `false` | Enable incremental sync (only fetch leads modified since last sync) |
 | `lastSyncTimestamp` | string | No | `""` | Last sync timestamp in ISO 8601 format (e.g., "2025-01-17T10:30:00Z"). Used when enableIncrementalSync is true |
@@ -118,9 +119,41 @@ Use the `soqlFilter` parameter to add custom WHERE clause conditions to filter l
 - Complex queries: `soqlFilter = "(Rating = 'Hot' OR Rating = 'Warm') AND Industry = 'Technology'"`
 
 **Filtering Options:**
-- Use `soqlFilter` to add custom WHERE clause conditions
-- Set `includeConverted = true` to include converted leads (default is `false`)
-- Combine both for precise filtering
+
+The integration provides multiple ways to filter leads:
+
+**1. Timeframe Filter** (`timeframe` parameter):
+Filter leads by when they were created using preset timeframes:
+- `"ALL"` (default) - No timeframe filtering, fetch all leads
+- `"YESTERDAY"` - Leads created yesterday
+- `"LAST_WEEK"` - Leads created last week (Monday to Sunday)
+- `"LAST_MONTH"` - Leads created last month
+- `"LAST_YEAR"` - Leads created last year
+
+**Example:**
+```toml
+timeframe = "LAST_WEEK"  # Only fetch leads created last week
+```
+
+**2. Custom SOQL Filter** (`soqlFilter` parameter):
+Add custom WHERE clause conditions for advanced filtering:
+```toml
+soqlFilter = "Rating = 'Hot' AND LeadSource = 'Web'"
+```
+
+**3. Include Converted Leads** (`includeConverted` parameter):
+```toml
+includeConverted = true  # Include converted leads (default is false)
+```
+
+**Combining Filters:**
+All filters work together. For example:
+```toml
+timeframe = "LAST_MONTH"
+soqlFilter = "Rating = 'Hot'"
+includeConverted = false
+```
+This fetches only unconverted hot leads created last month.
 
 **Sync Modes:**
 
@@ -271,6 +304,7 @@ tabName = "Hot Leads"
 timezone = "America/New_York"
 
 # Filter Configuration
+timeframe = "LAST_WEEK"  # Fetch leads created last week
 soqlFilter = "Rating = 'Hot' AND LeadSource = 'Web'"
 includeConverted = false
 
