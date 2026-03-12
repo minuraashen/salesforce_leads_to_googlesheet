@@ -13,5 +13,8 @@ config.toml
 CHOREO_CONFIG_REFERENCE.md
 DEVANT_DEPLOYMENT_GUIDE.md
 TESTING_GUIDE.md
+Dependencies.toml
+
+
 
 

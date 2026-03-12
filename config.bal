@@ -28,11 +28,8 @@ configurable string googleClientSecret = ?;
 
 configurable string timezone = "UTC";
 configurable string spreadsheetId = "";
-
-// Target sheet tab name
 configurable string tabName = "Leads";
 
-// Ordered list of Salesforce Lead field API names to export
 configurable string[] fieldMapping = [
     "Id",
     "FirstName",
@@ -49,28 +46,11 @@ configurable string[] fieldMapping = [
     "LastModifiedDate"
 ];
 
-// SOQL Filter Configuration
-// Additional SOQL WHERE clause fragment for filtering leads
 configurable string soqlFilter = "";
-
-// Timeframe filter for leads (based on CreatedDate)
-// Valid values: "ALL", "YESTERDAY", "LAST_WEEK", "LAST_MONTH", "LAST_YEAR"
 configurable string timeframe = "ALL";
-
-// Include converted leads
 configurable boolean includeConverted = false;
-
-// Enable incremental sync (only fetch leads modified since last sync)
 configurable boolean enableIncrementalSync = false;
-
-// Last sync timestamp (ISO 8601 format, e.g., "2025-01-17T10:30:00Z")
 configurable string lastSyncTimestamp = "";
-
-// Sync mode: APPEND, FULL_REPLACE, or UPSERT_BY_EMAIL
 configurable string syncMode = "APPEND";
-
-// Enable auto-formatting (bold headers, freeze first row)
 configurable boolean enableAutoFormat = true;
-
-// Split leads into multiple sheets by field (e.g., "LeadSource", "Status", or "" to disable)
 configurable string splitBy = "";
