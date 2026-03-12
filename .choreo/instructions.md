@@ -191,13 +191,17 @@ If you want to use an existing spreadsheet:
 ## Sync Configuration
 
 ### `syncMode` (optional)
-- **Type**: enum
-- **Default**: `APPEND`
+- **Type**: string
+- **Default**: `"APPEND"`
 - **Options**:
-  - `APPEND`: Adds new rows to the end of the sheet
-  - `FULL_REPLACE`: Clears the sheet and writes all leads (full refresh)
-  - `UPSERT_BY_EMAIL`: Merges leads by email address (simplified implementation)
+  - `"APPEND"`: Creates a new sheet with timestamped name and adds lead data
+  - `"FULL_REPLACE"`: Completely replaces entire spreadsheet with fresh data (destructive)
+  - `"UPSERT_BY_EMAIL"`: Updates existing leads by email, appends new ones (requires spreadsheetId and Email in fieldMapping)
 - **Description**: Determines how data is written to the spreadsheet.
+- **Requirements**:
+  - APPEND: Works with or without spreadsheetId
+  - FULL_REPLACE: Works with or without spreadsheetId (deletes all sheets if existing)
+  - UPSERT_BY_EMAIL: **MUST** provide spreadsheetId and include "Email" in fieldMapping
 
 ### `includeConverted` (optional)
 - **Type**: boolean
@@ -205,24 +209,31 @@ If you want to use an existing spreadsheet:
 - **Description**: Whether to include leads that have been converted to contacts/accounts/opportunities.
 - **Example**: `true` (includes converted leads)
 
-### `splitByField` (optional)
-- **Type**: enum
-- **Default**: `NONE`
-- **Options**:
-  - `NONE`: All leads written to a single tab
-  - `LeadSource`: Creates separate tabs for each lead source (e.g., "Web", "Phone Inquiry")
-  - `Status`: Creates separate tabs for each status (e.g., "Open", "Qualified", "Unqualified")
-- **Description**: Splits leads into multiple tabs based on field value.
+### `splitBy` (optional)
+- **Type**: string
+- **Default**: `""` (empty string, disabled)
+- **Description**: Split leads into multiple sheets by field value. Set to a field name from fieldMapping (e.g., "LeadSource", "Status", "Industry") or leave empty to disable.
+- **Examples**:
+  - `"LeadSource"`: Creates sheets like "Leads - Web", "Leads - Phone Inquiry"
+  - `"Status"`: Creates sheets like "Leads - Open", "Leads - Qualified"
+  - `""`: All leads in single sheet (default)
+- **Note**: Works with all sync modes (APPEND, FULL_REPLACE, UPSERT_BY_EMAIL)
+
+### `enableIncrementalSync` (optional)
+- **Type**: boolean
+- **Default**: `false`
+- **Description**: Enable incremental sync to only fetch leads modified since last sync.
+- **Note**: When enabled, check logs for next timestamp value to use.
 
 ### `lastSyncTimestamp` (optional)
 - **Type**: string
 - **Default**: `""` (no incremental sync)
-- **Description**: ISO 8601 timestamp for incremental sync. Only leads modified after this timestamp will be fetched.
+- **Description**: ISO 8601 timestamp for incremental sync. Only leads modified after this timestamp will be fetched. Used when enableIncrementalSync is true.
 - **Format**: `YYYY-MM-DDTHH:mm:ssZ`
 - **Examples**:
   - `"2025-01-01T00:00:00Z"`
   - `"2025-06-15T14:30:00Z"`
-- **Note**: Update this value after each successful sync for incremental updates.
+- **Note**: Update this value after each successful sync with the timestamp from logs.
 
 ### `timezone` (optional)
 - **Type**: string
@@ -233,6 +244,25 @@ If you want to use an existing spreadsheet:
   - `"Europe/London"`
   - `"Asia/Tokyo"`
   - `"America/Los_Angeles"`
+  - `"Asia/Colombo"`
+
+### `enableAutoFormat` (optional)
+- **Type**: boolean
+- **Default**: `true`
+- **Description**: Enable auto-formatting to prepare sheets for optimal viewing. Headers are placed in first row.
+- **Note**: Manual bold formatting and row freezing can be applied in Google Sheets UI.
+
+### `timeframe` (optional)
+- **Type**: string
+- **Default**: `"ALL"`
+- **Options**: `"ALL"`, `"YESTERDAY"`, `"LAST_WEEK"`, `"LAST_MONTH"`, `"LAST_YEAR"`
+- **Description**: Timeframe filter based on CreatedDate to fetch leads from specific time periods.
+- **Examples**:
+  - `"ALL"`: No timeframe filtering (default)
+  - `"YESTERDAY"`: Leads created yesterday
+  - `"LAST_WEEK"`: Leads created last week (Monday to Sunday)
+  - `"LAST_MONTH"`: Leads created last month
+  - `"LAST_YEAR"`: Leads created last year
 
 </details>
 
@@ -241,16 +271,16 @@ If you want to use an existing spreadsheet:
 ## Deployment Steps
 
 1. **Configure Salesforce Credentials**:
-   - `salesforceConfig.refreshToken`: Refresh token from Step 4 above
-   - `salesforceConfig.clientId`: Consumer Key from Salesforce Connected App
-   - `salesforceConfig.clientSecret`: Consumer Secret from Salesforce Connected App
-   - `salesforceConfig.refreshUrl`: `https://login.salesforce.com/services/oauth2/token`
-   - `salesforceConfig.baseUrl`: Your Salesforce instance URL
+   - `salesforceRefreshToken`: Refresh token from Step 4 above
+   - `salesforceClientId`: Consumer Key from Salesforce Connected App
+   - `salesforceClientSecret`: Consumer Secret from Salesforce Connected App
+   - `salesforceRefreshUrl`: `https://login.salesforce.com/services/oauth2/token`
+   - `salesforceBaseUrl`: Your Salesforce instance URL
 
 2. **Configure Google Credentials**:
-   - `googleConfig.refreshToken`: Refresh token from OAuth Playground
-   - `googleConfig.clientId`: OAuth Client ID from Google Cloud Console
-   - `googleConfig.clientSecret`: OAuth Client Secret from Google Cloud Console
+   - `googleRefreshToken`: Refresh token from OAuth Playground
+   - `googleClientId`: OAuth Client ID from Google Cloud Console
+   - `googleClientSecret`: OAuth Client Secret from Google Cloud Console
 
 3. **Configure Optional Settings**: Adjust any additional configurations as needed
 
