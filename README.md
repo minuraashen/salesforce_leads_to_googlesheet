@@ -1,116 +1,68 @@
-# Export Salesforce Leads to Google Sheets
+# Salesforce Opportunities to Google Sheets Integration
 
-A Ballerina automation integration that exports Salesforce Lead records to a Google Sheets spreadsheet on a configurable cron schedule.
+A Ballerina automation integration that exports Salesforce Opportunity records to a Google Sheets spreadsheet on a configurable schedule.
 
 ## Description
 
-This integration automatically syncs Salesforce Lead data to Google Sheets, enabling easy reporting, analysis, and sharing of lead information with stakeholders who may not have direct Salesforce access.
+This integration extracts all Opportunity records from Salesforce and creates a spreadsheet in Google Sheets with key opportunity information. Each execution creates a new spreadsheet with a timestamp, providing a historical snapshot of your opportunities over time.
 
 ## What It Does
 
-- Queries Salesforce Lead records using customizable SOQL filters
-- Maps selected Salesforce Lead fields to Google Sheets columns
+- Queries Salesforce Opportunity records using customizable SOQL filters
+- Maps selected Salesforce Opportunity fields to Google Sheets columns
 - Creates a new Google Sheets spreadsheet with a timestamped name (e.g., "Salesforce Leads 2025-01-17 14:30")
 - Optionally appends to an existing spreadsheet as a new sheet
 - Handles timezone conversion for spreadsheet naming
-- Filters converted leads based on configuration
 - Provides detailed logging of export operations
+- Supports multiple sync modes (APPEND, FULL_REPLACE, UPSERT_BY_EMAIL)
+- Enables filtering by timeframe and custom SOQL conditions
 
 ## Prerequisites
 
-### Salesforce OAuth Setup
+Before running this integration, you need:
 
-1. Log in to your Salesforce account
-2. Navigate to **Setup** → **Apps** → **App Manager**
-3. Click **New Connected App**
-4. Fill in the required fields:
-   - Connected App Name: `Ballerina Salesforce Integration`
-   - API Name: Auto-populated
-   - Contact Email: Your email
-5. Enable **OAuth Settings**:
-   - Callback URL: `https://login.salesforce.com/services/oauth2/callback`
-   - Selected OAuth Scopes:
-     - `Access and manage your data (api)`
-     - `Perform requests on your behalf at any time (refresh_token, offline_access)`
-6. Save and note the **Consumer Key** (Client ID) and **Consumer Secret** (Client Secret)
-7. Obtain a **Refresh Token** using OAuth 2.0 authorization flow
-8. Note your Salesforce instance URL (e.g., `https://yourinstance.salesforce.com`)
+### Salesforce Setup
 
-**Required Scopes:**
-- `api` - Access and manage your data
-- `refresh_token` - Perform requests on your behalf at any time
+1. A Salesforce account with API access
+2. OAuth2 credentials:
+   - Client ID
+   - Client Secret
+   - Refresh Token
+   - Refresh URL
+   - Base URL (your Salesforce instance URL)
 
-### Google Cloud Setup
+This integration uses refresh token flow for authentication. [Learn how to set up Salesforce OAuth](https://help.salesforce.com/s/articleView?id=xcloud.create_a_local_external_client_app.htm&type=5).
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable the **Google Sheets API** and **Google Drive API**
-4. Navigate to **APIs & Services** → **Credentials**
-5. Click **Create Credentials** → **OAuth 2.0 Client ID**
-6. Configure the OAuth consent screen if prompted
-7. Select **Application type**: Web application
-8. Add authorized redirect URI: `https://developers.google.com/oauthplayground`
-9. Note the **Client ID** and **Client Secret**
-10. Use [OAuth 2.0 Playground](https://developers.google.com/oauthplayground) to obtain a **Refresh Token**:
-    - Select **Google Sheets API v4** and **Google Drive API v3** scopes
-    - Authorize and exchange authorization code for tokens
+### Google Sheets Setup
 
-**Required Scopes:**
-- `https://www.googleapis.com/auth/spreadsheets` - Read and write spreadsheets
-- `https://www.googleapis.com/auth/drive` - Create and manage files in Google Drive
+1. A Google Cloud project with Google Sheets API enabled
+2. OAuth2 credentials:
+   - Client ID
+   - Client Secret
+   - Refresh Token
+3. Scopes Required:
+   - `https://www.googleapis.com/auth/drive`
+   - `https://www.googleapis.com/auth/spreadsheets`
 
-## Getting Your Spreadsheet ID
-
-To use an existing Google Spreadsheet:
-
-1. Open your Google Spreadsheet in a browser
-2. Look at the URL in the address bar
-3. The spreadsheet ID is the long string between `/d/` and `/edit`
-
-**Example URL:**
-```
-https://docs.google.com/spreadsheets/d/1abc123xyz456def789ghi012jkl345mno678pqr/edit#gid=0
-                                      ↑_____________________________________↑
-                                              This is your spreadsheet ID
-```
-
-4. Copy this ID and use it in your `spreadsheetId` configuration
-
-**Note:** If you don't provide a spreadsheet ID (or leave it empty), the integration will automatically create a new spreadsheet with a timestamped name each time it runs.
+This integration uses refresh token flow for authentication. [Learn how to Develop on Google Workspace](https://developers.google.com/workspace/guides/get-started).
 
 ## Configuration
 
-### Required Configurations
+The following configurations are required to connect to Salesforce and Google Sheets.
 
-#### Salesforce OAuth Settings
-- **`salesforceRefreshToken`** (string)  
-  Your Salesforce OAuth refresh token obtained during setup
+### Salesforce Credentials
 
-- **`salesforceClientId`** (string)  
-  Salesforce Connected App Consumer Key (Client ID)
+- **`salesforceRefreshToken`** - Your Salesforce OAuth2 refresh token
+- **`salesforceClientId`** - Your Salesforce OAuth2 client ID
+- **`salesforceClientSecret`** - Your Salesforce OAuth2 client secret
+- **`salesforceRefreshUrl`** - Salesforce OAuth2 token endpoint (e.g., `https://login.salesforce.com/services/oauth2/token`)
+- **`salesforceBaseUrl`** - Your Salesforce instance URL (e.g., `https://yourinstance.salesforce.com`)
 
-- **`salesforceClientSecret`** (string)  
-  Salesforce Connected App Consumer Secret (Client Secret)
+### Google Credentials
 
-- **`salesforceRefreshUrl`** (string)  
-  Salesforce token refresh endpoint  
-  Example: `https://login.salesforce.com/services/oauth2/token`
-
-- **`salesforceBaseUrl`** (string)  
-  Your Salesforce instance base URL  
-  Example: `https://yourinstance.salesforce.com`
-
-#### Google OAuth Settings
-- **`googleRefreshToken`** (string)  
-  Your Google OAuth refresh token obtained from OAuth Playground
-
-- **`googleClientId`** (string)  
-  Google Cloud OAuth Client ID
-
-- **`googleClientSecret`** (string)  
-  Google Cloud OAuth Client Secret
-
----
+- **`googleRefreshToken`** - Your Google OAuth2 refresh token
+- **`googleClientId`** - Your Google OAuth2 client ID
+- **`googleClientSecret`** - Your Google OAuth2 client secret
 
 ### Optional Configurations
 
@@ -306,94 +258,36 @@ When `splitBy` is configured, leads are automatically organized into separate sh
 - Example: If `splitBy = "Status"`, creates sheets like "Leads - Open", "Leads - Contacted", etc.
 - Works with all sync modes (APPEND, FULL_REPLACE, UPSERT_BY_EMAIL)
 
-## Deploying on WSO2 Devant
+## Deploying on Devant
 
-1. **Create a New Integration**
-   - Log in to WSO2 Devant
-   - Navigate to **Integrations** → **Create**
-   - Select **Automation** integration type
-   - Choose **Import from GitHub** or **Upload** this project
+1. Sign in to your Devant account.
+2. Create a new Integration and follow instructions in [Devant Documentation](https://wso2.com/devant/docs/references/import-a-repository/) to import this repository.
+3. Select the **Technology** as `WSO2 Integrator: BI`.
+4. Choose the **Integration** Type as `Automation` and click **Create**.
+5. Once the build is successful, click **Configure to Continue** and set up the required environment variables for Salesforce and Google Sheets credentials.
+6. Click **Schedule** to schedule the automation.
+7. In the **BY INTERVAL** tab, select **Week** from the dropdown.
+8. Set the desired day and time for the integration to run weekly and click **Update**.
+9. Once tested, you may promote the integration to production. Make sure to set the relevant environment variables in the production environment as well.
 
-2. **Configure Credentials**
-   - Navigate to the **Configuration** tab
-   - Fill in all required Salesforce and Google OAuth credentials
-   - Configure optional settings as needed
+## Getting Your Spreadsheet ID (Optional)
 
-3. **Set Up Scheduling**
-   - Navigate to the **Triggers** tab
-   - Click **Add Trigger** → **Cron Schedule**
-   - Configure the cron expression (e.g., `0 0 9 * * ?` for daily at 9 AM)
-   - Save the trigger
+To use an existing Google Spreadsheet:
 
-4. **Deploy**
-   - Click **Deploy** to activate the integration
-   - Monitor execution logs in the **Logs** tab
+1. Open your Google Spreadsheet in a browser
+2. Look at the URL in the address bar
+3. The spreadsheet ID is the long string between `/d/` and `/edit`
 
-5. **Test**
-   - Trigger a manual execution from the **Executions** tab
-   - Verify data appears in Google Sheets
-   - Check logs for any errors
-
-## Schedule Frequency Configuration
-
-The `scheduleFrequency` parameter is **NOT** a Ballerina configurable. Instead, it must be configured via the **WSO2 Devant UI** in the Triggers section:
-
-1. Navigate to **Integrations** → Select your integration → **Triggers** tab
-2. Click **Add Trigger** → **Cron Schedule**
-3. Configure the cron expression based on your desired frequency:
-   - **DAILY**: `0 0 9 * * ?` (9 AM daily)
-   - **WEEKLY**: `0 0 9 ? * MON` (9 AM every Monday)
-   - **MONTHLY**: `0 0 9 1 * ?` (9 AM on the 1st of each month)
-4. Save the trigger
-
-You can create multiple triggers with different schedules if needed.
-
-## Example Configuration
-
-```toml
-# Salesforce OAuth Configuration
-salesforceRefreshToken = "your_salesforce_refresh_token"
-salesforceClientId = "your_salesforce_client_id"
-salesforceClientSecret = "your_salesforce_client_secret"
-salesforceRefreshUrl = "https://login.salesforce.com/services/oauth2/token"
-salesforceBaseUrl = "https://yourinstance.salesforce.com"
-
-# Google OAuth Configuration
-googleRefreshToken = "your_google_refresh_token"
-googleClientId = "your_google_client_id"
-googleClientSecret = "your_google_client_secret"
-
-# Spreadsheet Configuration
-# Option 1: Add sheets to existing spreadsheet (works with all modes)
-spreadsheetId = "1abc123xyz456"  # Replace with your actual spreadsheet ID
-
-# Option 2: Create new spreadsheet each time (works with APPEND and FULL_REPLACE modes)
-# spreadsheetId = ""  # Leave empty or comment out
-
-tabName = "Hot Leads"
-timezone = "America/New_York"
-
-# Filter Configuration
-timeframe = "LAST_WEEK"  # Fetch leads created last week
-soqlFilter = "Rating = 'Hot' AND LeadSource = 'Web'"
-includeConverted = false
-
-# Sync Mode Configuration
-# Choose based on your use case:
-# - APPEND: Create new timestamped sheet (works with new or existing spreadsheets)
-# - FULL_REPLACE: Replace all data in sheet (works with new or existing spreadsheets)
-# - UPSERT_BY_EMAIL: Update existing + add new (requires existing spreadsheetId and "Email" in fieldMapping)
-syncMode = "UPSERT_BY_EMAIL"
-
-# Field Mapping (MUST include "Email" if using UPSERT_BY_EMAIL mode)
-fieldMapping = ["Id", "FirstName", "LastName", "Email", "Phone", "Company", "Status"]
-
-# Advanced Features
-enableIncrementalSync = false
-lastSyncTimestamp = ""  # Update after each sync with logged timestamp
-enableAutoFormat = true
-splitBy = ""  # e.g., "LeadSource" or "Status" to split into multiple sheets
+**Example URL:**
 ```
+https://docs.google.com/spreadsheets/d/1abc123xyz456def789ghi012jkl345mno678pqr/edit#gid=0
+                                      ↑_____________________________________↑
+                                              This is your spreadsheet ID
+```
+
+4. Copy this ID and use it in your `spreadsheetId` configuration
+
+**Note:** If you don't provide a spreadsheet ID (or leave it empty), the integration will automatically create a new spreadsheet with a timestamped name each time it runs.
 
 ## License
 
