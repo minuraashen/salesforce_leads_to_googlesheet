@@ -54,8 +54,3 @@ enum SyncMode {
     FULL_REPLACE,
     UPSERT_BY_EMAIL
 }
-
-enum LeadFilterMode {
-    SOQL,
-    LIST_VIEW
-}

@@ -71,26 +71,44 @@ public function main() returns error? {
             targetSheetName = spreadsheet.sheets[0].properties.title;
         }
         
-        // Execute sync based on mode and split configuration
-        if splitBy != "" {
-            // Split leads into multiple sheets
-            check syncLeadsSplit(workingSpreadsheetId, targetSheetName, leadValues);
+        // Determine effective sync mode (default to APPEND if empty)
+        string effectiveSyncMode = syncMode.trim() == "" ? "APPEND" : syncMode;
+        
+        // Validate sync mode compatibility
+        string? configSpreadsheetId = spreadsheetId;
+        boolean isNewSpreadsheet = false;
+        if configSpreadsheetId is () {
+            isNewSpreadsheet = true;
         } else {
-            // Single sheet sync
-            match syncMode {
-                APPEND => {
-                    check appendLeads(workingSpreadsheetId, targetSheetName, leadValues);
-                }
-                FULL_REPLACE => {
-                    check fullReplaceLeads(workingSpreadsheetId, targetSheetName, leadValues);
-                }
-                UPSERT_BY_EMAIL => {
-                    check upsertLeadsByEmail(workingSpreadsheetId, targetSheetName, leadValues);
-                }
+            string trimmedId = configSpreadsheetId.trim();
+            if trimmedId == "" {
+                isNewSpreadsheet = true;
             }
         }
         
-        log:printInfo(string `${leadValues.length()} ${leadValues.length() == 1 ? "lead" : "leads"} synced to the spreadsheet successfully using ${syncMode} mode.`);
+        // UPSERT_BY_EMAIL requires an existing spreadsheet to compare and update data
+        if isNewSpreadsheet && effectiveSyncMode == "UPSERT_BY_EMAIL" {
+            return error("UPSERT_BY_EMAIL mode requires an existing spreadsheet (spreadsheetId must be provided). This mode updates existing leads by email and cannot work with a new spreadsheet. Use APPEND or FULL_REPLACE mode for new spreadsheets.");
+        }
+        
+        // Execute sync based on mode and split configuration
+        if splitBy != "" {
+            // Split leads into multiple sheets
+            check syncLeadsSplit(workingSpreadsheetId, targetSheetName, leadValues, effectiveSyncMode);
+        } else {
+            // Single sheet sync
+            if effectiveSyncMode == "APPEND" {
+                check appendLeads(workingSpreadsheetId, targetSheetName, leadValues);
+            } else if effectiveSyncMode == "FULL_REPLACE" {
+                check fullReplaceLeads(workingSpreadsheetId, targetSheetName, leadValues);
+            } else if effectiveSyncMode == "UPSERT_BY_EMAIL" {
+                check upsertLeadsByEmail(workingSpreadsheetId, targetSheetName, leadValues);
+            } else {
+                return error(string `Invalid syncMode: ${effectiveSyncMode}. Must be "APPEND", "FULL_REPLACE", or "UPSERT_BY_EMAIL"`);
+            }
+        }
+        
+        log:printInfo(string `${leadValues.length()} ${leadValues.length() == 1 ? "lead" : "leads"} synced to the spreadsheet successfully using ${effectiveSyncMode} mode.`);
         
         // Log incremental sync info
         if enableIncrementalSync {
@@ -134,19 +152,37 @@ function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValu
 
 // Replace all data in the sheet
 function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues) returns error? {
-    // For FULL_REPLACE, delete the old sheet and create a new one
-    sheets:Sheet oldSheet = check getOrCreateSheet(spreadsheetId, sheetName);
-    _ = check sheetsClient->removeSheet(spreadsheetId, oldSheet.properties.sheetId);
+    // Get or create the sheet
+    sheets:Sheet sheet = check getOrCreateSheet(spreadsheetId, sheetName);
     
-    // Create new sheet with same name
-    sheets:Sheet newSheet = check sheetsClient->addSheet(spreadsheetId, sheetName);
+    // Check if this is the only sheet in the spreadsheet
+    sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
     
-    // Write headers and data
-    SheetRow[] allValues = [columns, ...leadValues];
-    _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: newSheet.properties.title});
-    
-    // Apply formatting
-    check applySheetFormatting(spreadsheetId, newSheet.properties.sheetId);
+    if spreadsheet.sheets.length() == 1 {
+        // If it's the only sheet, clear it instead of deleting
+        log:printInfo("Only one sheet exists. Clearing data instead of deleting sheet.");
+        _ = check sheetsClient->clearRange(spreadsheetId, sheet.properties.title, a1Notation = "A:Z");
+        
+        // Write headers and data
+        SheetRow[] allValues = [columns, ...leadValues];
+        _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: sheet.properties.title});
+        
+        // Apply formatting
+        check applySheetFormatting(spreadsheetId, sheet.properties.sheetId);
+    } else {
+        // Multiple sheets exist, safe to delete and recreate
+        _ = check sheetsClient->removeSheet(spreadsheetId, sheet.properties.sheetId);
+        
+        // Create new sheet with same name
+        sheets:Sheet newSheet = check sheetsClient->addSheet(spreadsheetId, sheetName);
+        
+        // Write headers and data
+        SheetRow[] allValues = [columns, ...leadValues];
+        _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: newSheet.properties.title});
+        
+        // Apply formatting
+        check applySheetFormatting(spreadsheetId, newSheet.properties.sheetId);
+    }
 }
 
 // Upsert leads by email (update existing, append new)
@@ -302,22 +338,18 @@ function getEmailColumnIndex() returns int {
 }
 
 // Sync leads split into multiple sheets by a field
-function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] leadValues) returns error? {
+function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] leadValues, string mode) returns error? {
     // Find the split field column index
     int splitFieldIndex = getSplitFieldIndex();
     
     if splitFieldIndex == -1 {
         log:printWarn(string `Split field "${splitBy}" not found in fieldMapping. Falling back to single sheet sync.`);
-        match syncMode {
-            APPEND => {
-                check appendLeads(spreadsheetId, baseSheetName, leadValues);
-            }
-            FULL_REPLACE => {
-                check fullReplaceLeads(spreadsheetId, baseSheetName, leadValues);
-            }
-            UPSERT_BY_EMAIL => {
-                check upsertLeadsByEmail(spreadsheetId, baseSheetName, leadValues);
-            }
+        if mode == "APPEND" {
+            check appendLeads(spreadsheetId, baseSheetName, leadValues);
+        } else if mode == "FULL_REPLACE" {
+            check fullReplaceLeads(spreadsheetId, baseSheetName, leadValues);
+        } else if mode == "UPSERT_BY_EMAIL" {
+            check upsertLeadsByEmail(spreadsheetId, baseSheetName, leadValues);
         }
         return;
     }
@@ -351,16 +383,12 @@ function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] l
         
         log:printInfo(string `Syncing ${groupLeads.length()} lead(s) to sheet: ${sheetName}`);
         
-        match syncMode {
-            APPEND => {
-                check appendLeads(spreadsheetId, sheetName, groupLeads);
-            }
-            FULL_REPLACE => {
-                check fullReplaceLeads(spreadsheetId, sheetName, groupLeads);
-            }
-            UPSERT_BY_EMAIL => {
-                check upsertLeadsByEmail(spreadsheetId, sheetName, groupLeads);
-            }
+        if mode == "APPEND" {
+            check appendLeads(spreadsheetId, sheetName, groupLeads);
+        } else if mode == "FULL_REPLACE" {
+            check fullReplaceLeads(spreadsheetId, sheetName, groupLeads);
+        } else if mode == "UPSERT_BY_EMAIL" {
+            check upsertLeadsByEmail(spreadsheetId, sheetName, groupLeads);
         }
     }
     

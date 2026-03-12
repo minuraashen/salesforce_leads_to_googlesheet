@@ -49,14 +49,9 @@ configurable string[] fieldMapping = [
     "LastModifiedDate"
 ];
 
-// Lead filter mode: SOQL or LIST_VIEW
-configurable LeadFilterMode filterMode = SOQL;
-
-// Additional SOQL WHERE clause fragment (used when filterMode = SOQL)
+// SOQL Filter Configuration
+// Additional SOQL WHERE clause fragment for filtering leads
 configurable string soqlFilter = "";
-
-// Salesforce List View ID (used when filterMode = LIST_VIEW)
-configurable string listViewId = "";
 
 // Include converted leads
 configurable boolean includeConverted = false;
@@ -68,7 +63,7 @@ configurable boolean enableIncrementalSync = false;
 configurable string lastSyncTimestamp = "";
 
 // Sync mode: APPEND, FULL_REPLACE, or UPSERT_BY_EMAIL
-configurable SyncMode syncMode = APPEND;
+configurable string syncMode = "APPEND";
 
 // Enable auto-formatting (bold headers, freeze first row)
 configurable boolean enableAutoFormat = true;

@@ -41,33 +41,14 @@ public function buildSoqlQuery() returns string|error {
     
     string[] whereConditions = [];
     
-    // Apply filter based on mode
-    match filterMode {
-        SOQL => {
-            // Filter out converted leads if configured
-            if !includeConverted {
-                whereConditions.push("IsConverted = false");
-            }
-            
-            // Add custom SOQL filter if provided
-            if soqlFilter != "" {
-                whereConditions.push(soqlFilter);
-            }
-        }
-        LIST_VIEW => {
-            // Validate list view ID is provided
-            if listViewId == "" {
-                return error("List View ID is required when filterMode is LIST_VIEW");
-            }
-            
-            // Use list view filtering
-            whereConditions.push(string `Id IN (SELECT Id FROM Lead WHERE Id IN (SELECT WhatId FROM ListView WHERE Id = '${listViewId}'))`);
-            
-            // Filter out converted leads if configured
-            if !includeConverted {
-                whereConditions.push("IsConverted = false");
-            }
-        }
+    // Filter out converted leads if configured
+    if !includeConverted {
+        whereConditions.push("IsConverted = false");
+    }
+    
+    // Add custom SOQL filter if provided
+    if soqlFilter != "" {
+        whereConditions.push(soqlFilter);
     }
     
     // Add incremental sync filter if enabled
@@ -88,3 +69,5 @@ public function buildSoqlQuery() returns string|error {
     
     return query;
 }
+
+
