@@ -80,28 +80,98 @@ https://docs.google.com/spreadsheets/d/1abc123xyz456def789ghi012jkl345mno678pqr/
 
 ## Configuration
 
-| Configuration | Type | Required | Default | Description |
-|--------------|------|----------|---------|-------------|
-| `salesforceRefreshToken` | string | Yes | - | Salesforce OAuth refresh token |
-| `salesforceClientId` | string | Yes | - | Salesforce OAuth client ID |
-| `salesforceClientSecret` | string | Yes | - | Salesforce OAuth client secret |
-| `salesforceRefreshUrl` | string | Yes | - | Salesforce token refresh URL (e.g., `https://login.salesforce.com/services/oauth2/token`) |
-| `salesforceBaseUrl` | string | Yes | - | Salesforce instance base URL (e.g., `https://yourinstance.salesforce.com`) |
-| `googleRefreshToken` | string | Yes | - | Google OAuth refresh token |
-| `googleClientId` | string | Yes | - | Google OAuth client ID |
-| `googleClientSecret` | string | Yes | - | Google OAuth client secret |
-| `spreadsheetId` | string | No | `""` | Target spreadsheet ID (e.g., "1abc123xyz456"). If provided, uses the existing spreadsheet. If not provided or empty, creates a new timestamped spreadsheet |
-| `tabName` | string | No | `"Leads"` | Target sheet tab name within the spreadsheet |
-| `timezone` | string | No | `"UTC"` | IANA timezone string for spreadsheet timestamp naming (e.g., "America/New_York", "Asia/Colombo") |
-| `fieldMapping` | string[] | No | See below | Ordered list of Salesforce Lead field API names to export |
-| `soqlFilter` | string | No | `""` | Additional SOQL WHERE clause fragment for filtering leads (e.g., "Rating = 'Hot' AND LeadSource = 'Web'") |
-| `timeframe` | string | No | `"ALL"` | Timeframe filter based on CreatedDate. Options: `"ALL"`, `"YESTERDAY"`, `"LAST_WEEK"`, `"LAST_MONTH"`, `"LAST_YEAR"` |
-| `includeConverted` | boolean | No | `false` | Whether to include converted leads |
-| `enableIncrementalSync` | boolean | No | `false` | Enable incremental sync (only fetch leads modified since last sync) |
-| `lastSyncTimestamp` | string | No | `""` | Last sync timestamp in ISO 8601 format (e.g., "2025-01-17T10:30:00Z"). Used when enableIncrementalSync is true |
-| `syncMode` | string | No | `"APPEND"` | Sync mode: `"APPEND"` (add new rows), `"FULL_REPLACE"` (replace all data), or `"UPSERT_BY_EMAIL"` (update by email, append new). If left empty or not specified, defaults to `"APPEND"` |
-| `enableAutoFormat` | boolean | No | `true` | Enable auto-formatting (prepares sheet for manual formatting of headers) |
-| `splitBy` | string | No | `""` | Split leads into multiple sheets by field (e.g., "LeadSource", "Status"). Leave empty to disable |
+### Required Configurations
+
+#### Salesforce OAuth Settings
+- **`salesforceRefreshToken`** (string)  
+  Your Salesforce OAuth refresh token obtained during setup
+
+- **`salesforceClientId`** (string)  
+  Salesforce Connected App Consumer Key (Client ID)
+
+- **`salesforceClientSecret`** (string)  
+  Salesforce Connected App Consumer Secret (Client Secret)
+
+- **`salesforceRefreshUrl`** (string)  
+  Salesforce token refresh endpoint  
+  Example: `https://login.salesforce.com/services/oauth2/token`
+
+- **`salesforceBaseUrl`** (string)  
+  Your Salesforce instance base URL  
+  Example: `https://yourinstance.salesforce.com`
+
+#### Google OAuth Settings
+- **`googleRefreshToken`** (string)  
+  Your Google OAuth refresh token obtained from OAuth Playground
+
+- **`googleClientId`** (string)  
+  Google Cloud OAuth Client ID
+
+- **`googleClientSecret`** (string)  
+  Google Cloud OAuth Client Secret
+
+---
+
+### Optional Configurations
+
+#### Spreadsheet Settings
+- **`spreadsheetId`** (string, default: `""`)  
+  Target Google Spreadsheet ID. If empty, creates a new spreadsheet each run.  
+  Example: `"1abc123xyz456def789ghi012jkl345mno678pqr"`
+
+- **`tabName`** (string, default: `"Leads"`)  
+  Name of the sheet tab within the spreadsheet
+
+- **`timezone`** (string, default: `"UTC"`)  
+  IANA timezone for timestamp formatting in spreadsheet names  
+  Examples: `"America/New_York"`, `"Asia/Colombo"`, `"Europe/London"`
+
+#### Field Mapping
+- **`fieldMapping`** (string[], default: see below)  
+  Ordered list of Salesforce Lead field API names to export as columns
+
+**Default Field Mapping:**
+```toml
+fieldMapping = [
+    "Id", "FirstName", "LastName", "Email", "Phone", 
+    "Company", "Title", "Status", "LeadSource", "Industry", 
+    "Rating", "CreatedDate", "LastModifiedDate"
+]
+```
+
+#### Filtering Options
+- **`soqlFilter`** (string, default: `""`)  
+  Custom SOQL WHERE clause for filtering leads  
+  Example: `"Rating = 'Hot' AND LeadSource = 'Web'"`
+
+- **`timeframe`** (string, default: `"ALL"`)  
+  Preset timeframe filter based on CreatedDate  
+  Options: `"ALL"`, `"YESTERDAY"`, `"LAST_WEEK"`, `"LAST_MONTH"`, `"LAST_YEAR"`
+
+- **`includeConverted`** (boolean, default: `false`)  
+  Whether to include leads that have been converted to contacts/accounts
+
+#### Sync Settings
+- **`syncMode`** (string, default: `"APPEND"`)  
+  How data is written to the spreadsheet  
+  Options: `"APPEND"`, `"FULL_REPLACE"`, `"UPSERT_BY_EMAIL"`
+
+- **`enableIncrementalSync`** (boolean, default: `false`)  
+  Only fetch leads modified since last sync (reduces API calls)
+
+- **`lastSyncTimestamp`** (string, default: `""`)  
+  Last sync timestamp in ISO 8601 format  
+  Example: `"2025-01-17T10:30:00Z"`  
+  Used when `enableIncrementalSync` is `true`
+
+#### Advanced Features
+- **`enableAutoFormat`** (boolean, default: `true`)  
+  Prepare sheets with headers in first row for optimal viewing
+
+- **`splitBy`** (string, default: `""`)  
+  Split leads into multiple sheets by field value  
+  Examples: `"LeadSource"`, `"Status"`, `"Industry"`  
+  Leave empty to disable
 
 **Default Field Mapping:**
 ```
