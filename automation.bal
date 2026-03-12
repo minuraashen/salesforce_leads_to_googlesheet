@@ -43,10 +43,23 @@ public function main() returns error? {
         // Resolve target spreadsheet and prepare data
         string workingSpreadsheetId;
         string targetSheetName;
-        if spreadsheetId is string {
-            workingSpreadsheetId = spreadsheetId ?: "";
-            targetSheetName = tabName;
-            log:printInfo("Using existing spreadsheet with ID: " + workingSpreadsheetId);
+        string? configuredSpreadsheetId = spreadsheetId;
+        if configuredSpreadsheetId is string {
+            string trimmedId = configuredSpreadsheetId.trim();
+            if trimmedId != "" {
+                workingSpreadsheetId = trimmedId;
+                targetSheetName = tabName;
+                log:printInfo("Using existing spreadsheet with ID: " + workingSpreadsheetId);
+            } else {
+                string currentTimeStamp = check getFormattedCurrentTimeStamp();
+                string spreadSheetName = string `Salesforce Leads ${currentTimeStamp}`;
+                sheets:Spreadsheet spreadsheet = check sheetsClient->createSpreadsheet(spreadSheetName);
+                log:printInfo("Spreadsheet created with name: " + spreadSheetName);
+                workingSpreadsheetId = spreadsheet.spreadsheetId;
+                
+                // Use the default sheet that comes with new spreadsheet
+                targetSheetName = spreadsheet.sheets[0].properties.title;
+            }
         } else {
             string currentTimeStamp = check getFormattedCurrentTimeStamp();
             string spreadSheetName = string `Salesforce Leads ${currentTimeStamp}`;

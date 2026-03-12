@@ -63,14 +63,14 @@ This integration automatically syncs Salesforce Lead data to Google Sheets, enab
 
 | Configuration | Type | Required | Default | Description |
 |--------------|------|----------|---------|-------------|
-| `salesforceConfig.refreshToken` | string | Yes | - | Salesforce OAuth refresh token |
-| `salesforceConfig.clientId` | string | Yes | - | Salesforce OAuth client ID |
-| `salesforceConfig.clientSecret` | string | Yes | - | Salesforce OAuth client secret |
-| `salesforceConfig.refreshUrl` | string | Yes | - | Salesforce token refresh URL (e.g., `https://login.salesforce.com/services/oauth2/token`) |
-| `salesforceConfig.baseUrl` | string | Yes | - | Salesforce instance base URL (e.g., `https://yourinstance.salesforce.com`) |
-| `googleConfig.refreshToken` | string | Yes | - | Google OAuth refresh token |
-| `googleConfig.clientId` | string | Yes | - | Google OAuth client ID |
-| `googleConfig.clientSecret` | string | Yes | - | Google OAuth client secret |
+| `salesforceRefreshToken` | string | Yes | - | Salesforce OAuth refresh token |
+| `salesforceClientId` | string | Yes | - | Salesforce OAuth client ID |
+| `salesforceClientSecret` | string | Yes | - | Salesforce OAuth client secret |
+| `salesforceRefreshUrl` | string | Yes | - | Salesforce token refresh URL (e.g., `https://login.salesforce.com/services/oauth2/token`) |
+| `salesforceBaseUrl` | string | Yes | - | Salesforce instance base URL (e.g., `https://yourinstance.salesforce.com`) |
+| `googleRefreshToken` | string | Yes | - | Google OAuth refresh token |
+| `googleClientId` | string | Yes | - | Google OAuth client ID |
+| `googleClientSecret` | string | Yes | - | Google OAuth client secret |
 | `spreadsheetId` | string | No | `()` | Target spreadsheet ID. If provided, uses the existing spreadsheet. If not provided, creates a new spreadsheet |
 | `tabName` | string | No | `"Leads"` | Target sheet tab name within the spreadsheet |
 | `timezone` | string | No | `"UTC"` | IANA timezone string for spreadsheet timestamp naming (e.g., "America/New_York", "Asia/Colombo") |
@@ -166,17 +166,17 @@ You can create multiple triggers with different schedules if needed.
 ## Example Configuration
 
 ```toml
-[salesforceConfig]
-refreshToken = "your_salesforce_refresh_token"
-clientId = "your_salesforce_client_id"
-clientSecret = "your_salesforce_client_secret"
-refreshUrl = "https://login.salesforce.com/services/oauth2/token"
-baseUrl = "https://yourinstance.salesforce.com"
+# Salesforce OAuth Configuration
+salesforceRefreshToken = "your_salesforce_refresh_token"
+salesforceClientId = "your_salesforce_client_id"
+salesforceClientSecret = "your_salesforce_client_secret"
+salesforceRefreshUrl = "https://login.salesforce.com/services/oauth2/token"
+salesforceBaseUrl = "https://yourinstance.salesforce.com"
 
-[googleConfig]
-refreshToken = "your_google_refresh_token"
-clientId = "your_google_client_id"
-clientSecret = "your_google_client_secret"
+# Google OAuth Configuration
+googleRefreshToken = "your_google_refresh_token"
+googleClientId = "your_google_client_id"
+googleClientSecret = "your_google_client_secret"
 
 spreadsheetId = "1abc123xyz456"
 tabName = "Hot Leads"

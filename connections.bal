@@ -19,21 +19,21 @@ import ballerinax/googleapis.sheets;
 
 // Initialize Salesforce client
 final salesforce:Client salesforceClient = check new ({
-    baseUrl: salesforceConfig.baseUrl,
+    baseUrl: salesforceBaseUrl,
     auth: {
-        clientId: salesforceConfig.clientId,
-        clientSecret: salesforceConfig.clientSecret,
-        refreshToken: salesforceConfig.refreshToken,
-        refreshUrl: salesforceConfig.refreshUrl
+        clientId: salesforceClientId,
+        clientSecret: salesforceClientSecret,
+        refreshToken: salesforceRefreshToken,
+        refreshUrl: salesforceRefreshUrl
     }
 });
 
 // Initialize Google Sheets client
 final sheets:Client sheetsClient = check new ({
     auth: {
-        clientId: googleConfig.clientId,
-        clientSecret: googleConfig.clientSecret,
-        refreshToken: googleConfig.refreshToken,
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
+        refreshToken: googleRefreshToken,
         refreshUrl: sheets:REFRESH_URL
     }
 });

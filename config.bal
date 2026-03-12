@@ -14,19 +14,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-configurable record {
-    string refreshToken;
-    string clientId;
-    string clientSecret;
-    string refreshUrl;
-    string baseUrl;
-} salesforceConfig = ?;
+// Salesforce OAuth Configuration
+configurable string salesforceRefreshToken = ?;
+configurable string salesforceClientId = ?;
+configurable string salesforceClientSecret = ?;
+configurable string salesforceRefreshUrl = ?;
+configurable string salesforceBaseUrl = ?;
 
-configurable record {
-    string refreshToken;
-    string clientId;
-    string clientSecret;
-} googleConfig = ?;
+// Google OAuth Configuration
+configurable string googleRefreshToken = ?;
+configurable string googleClientId = ?;
+configurable string googleClientSecret = ?;
 
 configurable string timezone = "UTC";
 configurable string? spreadsheetId = ();
