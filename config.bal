@@ -27,7 +27,7 @@ configurable string googleClientId = ?;
 configurable string googleClientSecret = ?;
 
 configurable string timezone = "UTC";
-configurable string? spreadsheetId = ();
+configurable string spreadsheetId = "";
 
 // Target sheet tab name
 configurable string tabName = "Leads";

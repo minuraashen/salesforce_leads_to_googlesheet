@@ -90,7 +90,7 @@ https://docs.google.com/spreadsheets/d/1abc123xyz456def789ghi012jkl345mno678pqr/
 | `googleRefreshToken` | string | Yes | - | Google OAuth refresh token |
 | `googleClientId` | string | Yes | - | Google OAuth client ID |
 | `googleClientSecret` | string | Yes | - | Google OAuth client secret |
-| `spreadsheetId` | string | No | `()` | Target spreadsheet ID (e.g., "1abc123xyz456"). If provided, uses the existing spreadsheet. If not provided or empty, creates a new timestamped spreadsheet |
+| `spreadsheetId` | string | No | `""` | Target spreadsheet ID (e.g., "1abc123xyz456"). If provided, uses the existing spreadsheet. If not provided or empty, creates a new timestamped spreadsheet |
 | `tabName` | string | No | `"Leads"` | Target sheet tab name within the spreadsheet |
 | `timezone` | string | No | `"UTC"` | IANA timezone string for spreadsheet timestamp naming (e.g., "America/New_York", "Asia/Colombo") |
 | `fieldMapping` | string[] | No | See below | Ordered list of Salesforce Lead field API names to export |
@@ -127,30 +127,31 @@ Use the `soqlFilter` parameter to add custom WHERE clause conditions to filter l
 The integration supports three sync modes. Choose based on your use case:
 
 **1. APPEND Mode (Default)**
-- **What it does**: Adds new rows to the end of the sheet without modifying existing data
+- **What it does**: Creates a new sheet with a timestamped name and adds the lead data
 - **When to use**: 
-  - Creating a new spreadsheet OR using an existing one
-  - Building a historical log of all leads over time
-  - You want to keep all records, including duplicates
+  - Building a historical log of all leads over time as separate sheets
+  - You want to keep snapshots of leads from different time periods
+  - Creating a new spreadsheet OR adding to an existing one
 - **Requirements**: None (works with or without `spreadsheetId`)
 - **Behavior**: 
-  - If sheet is empty: Adds headers + data
-  - If sheet has data: Appends new rows only
-- **Example use case**: Daily export of new leads for historical tracking
+  - With `spreadsheetId`: Creates a new sheet named "{tabName} {timestamp}" in the existing spreadsheet
+  - Without `spreadsheetId`: Creates a new spreadsheet named "Salesforce Leads {timestamp}" with a sheet named "{tabName} {timestamp}"
+  - Each run creates a new sheet with headers + data
+- **Example use case**: Daily export creating separate sheets like "Leads 2025-01-17 09:00", "Leads 2025-01-18 09:00", etc.
 
 **2. FULL_REPLACE Mode**
-- **What it does**: Completely replaces all data in the sheet with fresh data from Salesforce
+- **What it does**: Completely replaces the entire spreadsheet with fresh data from Salesforce
 - **When to use**:
-  - Creating a new spreadsheet OR using an existing one
-  - You want a current snapshot (not historical data)
-  - You need to refresh the entire dataset
+  - You want a current snapshot that gets refreshed each run (not historical data)
+  - You need a clean spreadsheet with only the latest data
+  - You want to remove all old sheets and start fresh
 - **Requirements**: None (works with or without `spreadsheetId`)
 - **Behavior**:
-  - Clears all existing data in the sheet
+  - Without `spreadsheetId`: Creates a new spreadsheet named "Salesforce Leads {timestamp}" with a sheet named "{tabName}"
+  - With `spreadsheetId`: **DELETES ALL EXISTING SHEETS** in the spreadsheet and creates a single new sheet named "{tabName}" with fresh data
+  - ⚠️ **Warning**: This mode is destructive when used with an existing spreadsheet - all sheets will be permanently deleted
   - Writes fresh headers + current data
-  - If it's the only sheet in spreadsheet: Clears and rewrites data
-  - If multiple sheets exist: Deletes and recreates the sheet
-- **Example use case**: Weekly refresh of all open leads
+- **Example use case**: Weekly refresh where you want only the latest leads, removing all previous data and sheets
 
 **3. UPSERT_BY_EMAIL Mode**
 - **What it does**: Updates existing leads (matched by email) and adds new ones
@@ -173,8 +174,10 @@ The integration supports three sync modes. Choose based on your use case:
 | Scenario | Recommended Mode | Requires spreadsheetId? |
 |----------|------------------|-------------------------|
 | Creating new spreadsheet each time | `APPEND` or `FULL_REPLACE` | No |
-| Want historical log of all leads | `APPEND` | No |
-| Want current snapshot, replace old data | `FULL_REPLACE` | No |
+| Want historical log as separate sheets | `APPEND` | No (or Yes for existing spreadsheet) |
+| Want to add timestamped sheets to existing spreadsheet | `APPEND` | **Yes** |
+| Want to completely replace entire spreadsheet | `FULL_REPLACE` | **Yes** |
+| Regularly refresh with only latest data (delete old sheets) | `FULL_REPLACE` | **Yes** |
 | Want to update existing leads, avoid duplicates | `UPSERT_BY_EMAIL` | **Yes** |
 | Syncing same leads daily to track changes | `UPSERT_BY_EMAIL` | **Yes** |
 
@@ -258,7 +261,7 @@ googleClientId = "your_google_client_id"
 googleClientSecret = "your_google_client_secret"
 
 # Spreadsheet Configuration
-# Option 1: Use existing spreadsheet (required for UPSERT_BY_EMAIL mode)
+# Option 1: Add sheets to existing spreadsheet (works with all modes)
 spreadsheetId = "1abc123xyz456"  # Replace with your actual spreadsheet ID
 
 # Option 2: Create new spreadsheet each time (works with APPEND and FULL_REPLACE modes)
@@ -273,8 +276,8 @@ includeConverted = false
 
 # Sync Mode Configuration
 # Choose based on your use case:
-# - APPEND: Add new rows (works with new or existing spreadsheets)
-# - FULL_REPLACE: Replace all data (requires existing spreadsheetId)
+# - APPEND: Create new timestamped sheet (works with new or existing spreadsheets)
+# - FULL_REPLACE: Replace all data in sheet (works with new or existing spreadsheets)
 # - UPSERT_BY_EMAIL: Update existing + add new (requires existing spreadsheetId and "Email" in fieldMapping)
 syncMode = "UPSERT_BY_EMAIL"
 

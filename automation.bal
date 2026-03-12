@@ -42,49 +42,27 @@ public function main() returns error? {
         
         // Resolve target spreadsheet and prepare data
         string workingSpreadsheetId;
-        string targetSheetName;
-        string? configuredSpreadsheetId = spreadsheetId;
-        if configuredSpreadsheetId is string {
-            string trimmedId = configuredSpreadsheetId.trim();
-            if trimmedId != "" {
-                workingSpreadsheetId = trimmedId;
-                targetSheetName = tabName;
-                log:printInfo("Using existing spreadsheet with ID: " + workingSpreadsheetId);
-            } else {
-                string currentTimeStamp = check getFormattedCurrentTimeStamp();
-                string spreadSheetName = string `Salesforce Leads ${currentTimeStamp}`;
-                sheets:Spreadsheet spreadsheet = check sheetsClient->createSpreadsheet(spreadSheetName);
-                log:printInfo("Spreadsheet created with name: " + spreadSheetName);
-                workingSpreadsheetId = spreadsheet.spreadsheetId;
-                
-                // Use the default sheet that comes with new spreadsheet
-                targetSheetName = spreadsheet.sheets[0].properties.title;
-            }
+        string targetSheetName = tabName;
+        string trimmedSpreadsheetId = spreadsheetId.trim();
+        
+        if trimmedSpreadsheetId != "" {
+            // Use existing spreadsheet
+            workingSpreadsheetId = trimmedSpreadsheetId;
+            log:printInfo("Using existing spreadsheet with ID: " + workingSpreadsheetId);
         } else {
+            // Create new spreadsheet
             string currentTimeStamp = check getFormattedCurrentTimeStamp();
             string spreadSheetName = string `Salesforce Leads ${currentTimeStamp}`;
             sheets:Spreadsheet spreadsheet = check sheetsClient->createSpreadsheet(spreadSheetName);
             log:printInfo("Spreadsheet created with name: " + spreadSheetName);
             workingSpreadsheetId = spreadsheet.spreadsheetId;
-            
-            // Use the default sheet that comes with new spreadsheet
-            targetSheetName = spreadsheet.sheets[0].properties.title;
         }
         
         // Determine effective sync mode (default to APPEND if empty)
         string effectiveSyncMode = syncMode.trim() == "" ? "APPEND" : syncMode;
         
         // Validate sync mode compatibility
-        string? configSpreadsheetId = spreadsheetId;
-        boolean isNewSpreadsheet = false;
-        if configSpreadsheetId is () {
-            isNewSpreadsheet = true;
-        } else {
-            string trimmedId = configSpreadsheetId.trim();
-            if trimmedId == "" {
-                isNewSpreadsheet = true;
-            }
-        }
+        boolean isNewSpreadsheet = trimmedSpreadsheetId == "";
         
         // UPSERT_BY_EMAIL requires an existing spreadsheet to compare and update data
         if isNewSpreadsheet && effectiveSyncMode == "UPSERT_BY_EMAIL" {
@@ -94,13 +72,13 @@ public function main() returns error? {
         // Execute sync based on mode and split configuration
         if splitBy != "" {
             // Split leads into multiple sheets
-            check syncLeadsSplit(workingSpreadsheetId, targetSheetName, leadValues, effectiveSyncMode);
+            check syncLeadsSplit(workingSpreadsheetId, targetSheetName, leadValues, effectiveSyncMode, isNewSpreadsheet);
         } else {
             // Single sheet sync
             if effectiveSyncMode == "APPEND" {
-                check appendLeads(workingSpreadsheetId, targetSheetName, leadValues);
+                check appendLeads(workingSpreadsheetId, targetSheetName, leadValues, isNewSpreadsheet);
             } else if effectiveSyncMode == "FULL_REPLACE" {
-                check fullReplaceLeads(workingSpreadsheetId, targetSheetName, leadValues);
+                check fullReplaceLeads(workingSpreadsheetId, targetSheetName, leadValues, isNewSpreadsheet);
             } else if effectiveSyncMode == "UPSERT_BY_EMAIL" {
                 check upsertLeadsByEmail(workingSpreadsheetId, targetSheetName, leadValues);
             } else {
@@ -122,66 +100,98 @@ public function main() returns error? {
     }
 }
 
-// Append leads to the sheet
-function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues) returns error? {
-    // Check if sheet exists, if not create it
-    sheets:Sheet sheet = check getOrCreateSheet(spreadsheetId, sheetName);
+// Append leads to a new sheet with timestamped name
+function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues, boolean isNewSpreadsheet) returns error? {
+    sheets:Sheet targetSheet;
+    string newSheetName;
     
-    // Check if sheet is empty by trying to get values
-    boolean sheetEmpty = check isSheetEmpty(spreadsheetId, sheet.properties.title);
-    
-    SheetRow[] dataToAppend;
-    if sheetEmpty {
-        // Include headers only if sheet is empty
-        dataToAppend = [columns, ...leadValues];
-        log:printInfo("Sheet is empty. Adding headers and data.");
+    if isNewSpreadsheet {
+        // For new spreadsheet, use and rename the default sheet
+        sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
+        sheets:Sheet defaultSheet = spreadsheet.sheets[0];
         
-        // Append data first
-        _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: sheet.properties.title});
+        // Create timestamped sheet name
+        string currentTimeStamp = check getFormattedCurrentTimeStamp();
+        newSheetName = string `${sheetName} ${currentTimeStamp}`;
         
-        // Apply formatting to new sheet
-        check applySheetFormatting(spreadsheetId, sheet.properties.sheetId);
+        // Rename the default sheet
+        int sheetId = defaultSheet.properties.sheetId;
+        _ = check sheetsClient->renameSheet(spreadsheetId, sheetId.toString(), newSheetName);
+        log:printInfo(string `Renamed default sheet to: ${newSheetName}`);
+        
+        // Fetch the updated sheet to get the correct structure
+        sheets:Spreadsheet updatedSpreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
+        targetSheet = updatedSpreadsheet.sheets[0];
     } else {
-        // Only append data if sheet already has content
-        dataToAppend = leadValues;
-        log:printInfo("Sheet has existing data. Appending new rows without headers.");
+        // For existing spreadsheet, create a new sheet with timestamped name
+        string currentTimeStamp = check getFormattedCurrentTimeStamp();
+        newSheetName = string `${sheetName} ${currentTimeStamp}`;
         
-        _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: sheet.properties.title});
+        targetSheet = check sheetsClient->addSheet(spreadsheetId, newSheetName);
+        log:printInfo(string `Created new sheet: ${newSheetName}`);
     }
+    
+    // Prepare data with headers
+    SheetRow[] dataToAppend = [columns, ...leadValues];
+    
+    // Append data to the sheet
+    _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: targetSheet.properties.title});
+    
+    // Apply formatting to sheet
+    check applySheetFormatting(spreadsheetId, targetSheet.properties.sheetId);
 }
 
 // Replace all data in the sheet
-function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues) returns error? {
-    // Get or create the sheet
-    sheets:Sheet sheet = check getOrCreateSheet(spreadsheetId, sheetName);
+function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues, boolean isNewSpreadsheet) returns error? {
+    // Prepare all data (headers + leads)
+    SheetRow[] allValues = [columns, ...leadValues];
     
-    // Check if this is the only sheet in the spreadsheet
-    sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
-    
-    if spreadsheet.sheets.length() == 1 {
-        // If it's the only sheet, clear it instead of deleting
-        log:printInfo("Only one sheet exists. Clearing data instead of deleting sheet.");
-        _ = check sheetsClient->clearRange(spreadsheetId, sheet.properties.title, a1Notation = "A:Z");
+    if isNewSpreadsheet {
+        // For new spreadsheet, use and rename the default sheet to the target sheet name
+        sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
+        sheets:Sheet defaultSheet = spreadsheet.sheets[0];
+        
+        // Rename the default sheet to the target sheet name (no timestamp)
+        int sheetId = defaultSheet.properties.sheetId;
+        _ = check sheetsClient->renameSheet(spreadsheetId, sheetId.toString(), sheetName);
+        log:printInfo(string `Renamed default sheet to: ${sheetName}`);
+        
+        // Fetch the updated sheet
+        sheets:Spreadsheet updatedSpreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
+        sheets:Sheet targetSheet = updatedSpreadsheet.sheets[0];
         
         // Write headers and data
-        SheetRow[] allValues = [columns, ...leadValues];
-        _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: sheet.properties.title});
+        _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: targetSheet.properties.title});
         
         // Apply formatting
-        check applySheetFormatting(spreadsheetId, sheet.properties.sheetId);
+        check applySheetFormatting(spreadsheetId, targetSheet.properties.sheetId);
     } else {
-        // Multiple sheets exist, safe to delete and recreate
-        _ = check sheetsClient->removeSheet(spreadsheetId, sheet.properties.sheetId);
+        // For existing spreadsheet, delete ALL sheets and create a fresh new sheet
+        sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         
-        // Create new sheet with same name
+        log:printInfo(string `Deleting all ${spreadsheet.sheets.length()} existing sheet(s) from the spreadsheet.`);
+        
+        // Create a temporary sheet first (Google Sheets requires at least one sheet)
+        sheets:Sheet tempSheet = check sheetsClient->addSheet(spreadsheetId, "TempSheet_DeleteMe");
+        
+        // Delete all original sheets
+        foreach sheets:Sheet sheet in spreadsheet.sheets {
+            _ = check sheetsClient->removeSheet(spreadsheetId, sheet.properties.sheetId);
+        }
+        
+        // Create new sheet with target name
         sheets:Sheet newSheet = check sheetsClient->addSheet(spreadsheetId, sheetName);
         
         // Write headers and data
-        SheetRow[] allValues = [columns, ...leadValues];
         _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: newSheet.properties.title});
         
         // Apply formatting
         check applySheetFormatting(spreadsheetId, newSheet.properties.sheetId);
+        
+        // Delete the temporary sheet
+        _ = check sheetsClient->removeSheet(spreadsheetId, tempSheet.properties.sheetId);
+        
+        log:printInfo(string `All existing sheets deleted. Created fresh sheet: ${sheetName}`);
     }
 }
 
@@ -221,24 +231,27 @@ function upsertLeadsByEmail(string spreadsheetId, string sheetName, SheetRow[] l
         return;
     }
     
-    // Build map of existing emails to row data and indices
-    map<SheetRow> emailToRowData = {};
+    // Build ordered list of existing rows with email tracking
+    SheetRow[] existingRows = [];
     map<int> emailToRowIndex = {};
     
-    int rowIndex = 1;
+    int rowIndex = 0;
     foreach (int|string|decimal)[] row in existingValues.slice(1) {
+        SheetRow convertedRow = [];
+        foreach (int|string|decimal) cell in row {
+            convertedRow.push(cell);
+        }
+        
+        // Track email to row index mapping
         if row.length() > emailColumnIndex {
             (int|string|decimal) emailValue = row[emailColumnIndex];
             string email = emailValue.toString();
             if email != "" {
-                SheetRow convertedRow = [];
-                foreach (int|string|decimal) cell in row {
-                    convertedRow.push(cell);
-                }
-                emailToRowData[email] = convertedRow;
                 emailToRowIndex[email] = rowIndex;
             }
         }
+        
+        existingRows.push(convertedRow);
         rowIndex = rowIndex + 1;
     }
     
@@ -251,9 +264,10 @@ function upsertLeadsByEmail(string spreadsheetId, string sheetName, SheetRow[] l
             int|string|decimal|boolean|float emailValue = leadRow[emailColumnIndex];
             string email = emailValue.toString();
             
-            if email != "" && emailToRowData.hasKey(email) {
-                // Update existing row data in map
-                emailToRowData[email] = leadRow;
+            if email != "" && emailToRowIndex.hasKey(email) {
+                // Update existing row in place
+                int existingRowIndex = emailToRowIndex.get(email);
+                existingRows[existingRowIndex] = leadRow;
                 updatedCount = updatedCount + 1;
             } else {
                 // Collect new lead for appending
@@ -265,11 +279,10 @@ function upsertLeadsByEmail(string spreadsheetId, string sheetName, SheetRow[] l
         }
     }
     
-    // Rebuild all data with updates
+    // Rebuild all data with updates (preserving original order)
     SheetRow[] allData = [columns];
-    foreach string email in emailToRowData.keys() {
-        SheetRow rowData = emailToRowData.get(email);
-        allData.push(rowData);
+    foreach SheetRow row in existingRows {
+        allData.push(row);
     }
     
     // Clear sheet and write updated data
@@ -338,16 +351,16 @@ function getEmailColumnIndex() returns int {
 }
 
 // Sync leads split into multiple sheets by a field
-function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] leadValues, string mode) returns error? {
+function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] leadValues, string mode, boolean isNewSpreadsheet) returns error? {
     // Find the split field column index
     int splitFieldIndex = getSplitFieldIndex();
     
     if splitFieldIndex == -1 {
         log:printWarn(string `Split field "${splitBy}" not found in fieldMapping. Falling back to single sheet sync.`);
         if mode == "APPEND" {
-            check appendLeads(spreadsheetId, baseSheetName, leadValues);
+            check appendLeads(spreadsheetId, baseSheetName, leadValues, isNewSpreadsheet);
         } else if mode == "FULL_REPLACE" {
-            check fullReplaceLeads(spreadsheetId, baseSheetName, leadValues);
+            check fullReplaceLeads(spreadsheetId, baseSheetName, leadValues, isNewSpreadsheet);
         } else if mode == "UPSERT_BY_EMAIL" {
             check upsertLeadsByEmail(spreadsheetId, baseSheetName, leadValues);
         }
@@ -377,6 +390,7 @@ function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] l
     }
     
     // Sync each group to its own sheet
+    boolean isFirstGroup = true;
     foreach string groupKey in groupedLeads.keys() {
         SheetRow[] groupLeads = groupedLeads.get(groupKey);
         string sheetName = string `${baseSheetName} - ${groupKey}`;
@@ -384,9 +398,13 @@ function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] l
         log:printInfo(string `Syncing ${groupLeads.length()} lead(s) to sheet: ${sheetName}`);
         
         if mode == "APPEND" {
-            check appendLeads(spreadsheetId, sheetName, groupLeads);
+            // Only the first group uses the default sheet if it's a new spreadsheet
+            check appendLeads(spreadsheetId, sheetName, groupLeads, isNewSpreadsheet && isFirstGroup);
+            isFirstGroup = false;
         } else if mode == "FULL_REPLACE" {
-            check fullReplaceLeads(spreadsheetId, sheetName, groupLeads);
+            // Only the first group uses the default sheet if it's a new spreadsheet
+            check fullReplaceLeads(spreadsheetId, sheetName, groupLeads, isNewSpreadsheet && isFirstGroup);
+            isFirstGroup = false;
         } else if mode == "UPSERT_BY_EMAIL" {
             check upsertLeadsByEmail(spreadsheetId, sheetName, groupLeads);
         }
