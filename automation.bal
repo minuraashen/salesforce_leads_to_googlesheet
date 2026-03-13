@@ -61,7 +61,12 @@ public function main() returns error? {
         
         if enableIncrementalSync {
             string currentTimestamp = check getCurrentTimestamp();
-            log:printInfo(string `Incremental sync completed. Next sync should use lastSyncTimestamp: "${currentTimestamp}"`);
+            error? saveResult = saveLastSyncTimestamp(currentTimestamp);
+            if saveResult is error {
+                log:printWarn(string `Incremental sync completed but timestamp persistence failed. For the next run, manually set lastSyncTimestamp="${currentTimestamp}" in your configuration.`);
+            } else {
+                log:printInfo(string `Incremental sync completed. Timestamp "${currentTimestamp}" persisted for next run.`);
+            }
         }
         
     } on fail error e {
