@@ -86,15 +86,15 @@ function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValu
         string currentTimeStamp = check getFormattedCurrentTimeStamp();
         newSheetName = string `${sheetName} ${currentTimeStamp}`;
         
-        int sheetId = defaultSheet.properties.sheetId;
-        _ = check sheetsClient->renameSheet(spreadsheetId, sheetId.toString(), newSheetName);
+        string currentSheetName = defaultSheet.properties.title;
+        _ = check sheetsClient->renameSheet(spreadsheetId, currentSheetName, newSheetName);
         log:printInfo(string `Renamed default sheet to: ${newSheetName}`);
         
         sheets:Spreadsheet updatedSpreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         targetSheet = updatedSpreadsheet.sheets[0];
     } else {
         string currentTimeStamp = check getFormattedCurrentTimeStamp();
-        newSheetName = string `${sheetName} ${currentTimeStamp}`;
+        newSheetName = check generateUniqueSheetName(spreadsheetId, sheetName, currentTimeStamp);
         
         targetSheet = check sheetsClient->addSheet(spreadsheetId, newSheetName);
         log:printInfo(string `Created new sheet: ${newSheetName}`);
@@ -114,8 +114,8 @@ function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] lea
         sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         sheets:Sheet defaultSheet = spreadsheet.sheets[0];
         
-        int sheetId = defaultSheet.properties.sheetId;
-        _ = check sheetsClient->renameSheet(spreadsheetId, sheetId.toString(), sheetName);
+        string currentSheetName = defaultSheet.properties.title;
+        _ = check sheetsClient->renameSheet(spreadsheetId, currentSheetName, sheetName);
         log:printInfo(string `Renamed default sheet to: ${sheetName}`);
         
         sheets:Spreadsheet updatedSpreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
@@ -252,7 +252,7 @@ function isSheetEmpty(string spreadsheetId, string sheetName) returns boolean|er
     sheets:Range|error result = sheetsClient->getRange(spreadsheetId, sheetName, "A1:A1");
     
     if result is error {
-        return true;
+        return result;
     }
     
     sheets:Range range = result;
@@ -318,18 +318,18 @@ function syncLeadsSplit(string spreadsheetId, string baseSheetName, SheetRow[] l
     boolean isFirstGroup = true;
     foreach string groupKey in groupedLeads.keys() {
         SheetRow[] groupLeads = groupedLeads.get(groupKey);
-        string sheetName = string `${baseSheetName} - ${groupKey}`;
+        string sheetNameWithGroup = string `${baseSheetName} - ${groupKey}`;
         
-        log:printInfo(string `Syncing ${groupLeads.length()} lead(s) to sheet: ${sheetName}`);
+        log:printInfo(string `Syncing ${groupLeads.length()} lead(s) to sheet: ${sheetNameWithGroup}`);
         
         if mode == "APPEND" {
-            check appendLeads(spreadsheetId, sheetName, groupLeads, isNewSpreadsheet && isFirstGroup);
+            check appendLeads(spreadsheetId, sheetNameWithGroup, groupLeads, isNewSpreadsheet && isFirstGroup);
             isFirstGroup = false;
         } else if mode == "FULL_REPLACE" {
-            check fullReplaceLeads(spreadsheetId, sheetName, groupLeads, isNewSpreadsheet && isFirstGroup);
+            check fullReplaceLeads(spreadsheetId, sheetNameWithGroup, groupLeads, isNewSpreadsheet && isFirstGroup);
             isFirstGroup = false;
         } else if mode == "UPSERT_BY_EMAIL" {
-            check upsertLeadsByEmail(spreadsheetId, sheetName, groupLeads);
+            check upsertLeadsByEmail(spreadsheetId, sheetNameWithGroup, groupLeads);
         }
     }
     
@@ -353,4 +353,43 @@ function applySheetFormatting(string spreadsheetId, int sheetId) returns error? 
     }
     
     log:printInfo("Auto-formatting enabled. Headers will appear in first row (manual formatting recommended for bold/freeze).");
+}
+
+function generateUniqueSheetName(string spreadsheetId, string baseSheetName, string timestamp) returns string|error {
+    sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
+    
+    string proposedName = string `${baseSheetName} ${timestamp}`;
+    
+    boolean nameExists = false;
+    foreach sheets:Sheet sheet in spreadsheet.sheets {
+        if sheet.properties.title == proposedName {
+            nameExists = true;
+            break;
+        }
+    }
+    
+    if !nameExists {
+        return proposedName;
+    }
+    
+    int counter = 1;
+    while counter <= 100 {
+        string uniqueName = string `${baseSheetName} ${timestamp} (${counter})`;
+        boolean counterNameExists = false;
+        
+        foreach sheets:Sheet sheet in spreadsheet.sheets {
+            if sheet.properties.title == uniqueName {
+                counterNameExists = true;
+                break;
+            }
+        }
+        
+        if !counterNameExists {
+            return uniqueName;
+        }
+        
+        counter = counter + 1;
+    }
+    
+    return error(string `Unable to generate unique sheet name after 100 attempts for: ${proposedName}`);
 }

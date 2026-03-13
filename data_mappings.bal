@@ -17,13 +17,13 @@ public function mapLeadToRow(Lead lead) returns SheetRow {
         "Country": lead?.Country ?: "",
         "City": lead?.City ?: "",
         "State": lead?.State ?: "",
-        "IsConverted": lead?.IsConverted ?: false,
+        "IsConverted": lead?.IsConverted ?: "",
         "ConvertedDate": lead?.ConvertedDate ?: "",
         "CreatedDate": lead?.CreatedDate ?: "",
         "LastModifiedDate": lead?.LastModifiedDate ?: "",
         "LastActivityDate": lead?.LastActivityDate ?: "",
-        "NumberOfEmployees": lead?.NumberOfEmployees ?: 0,
-        "AnnualRevenue": lead?.AnnualRevenue ?: 0.0
+        "NumberOfEmployees": lead?.NumberOfEmployees ?: "",
+        "AnnualRevenue": lead?.AnnualRevenue ?: ""
     };
 
     SheetRow row = [];

@@ -18,7 +18,7 @@ function loadLastSyncTimestamp() returns string|error {
         string timestamp = check io:fileReadString(STATE_FILE_PATH);
         log:printInfo(string `Loaded last sync timestamp from state file: "${timestamp}"`);
         return timestamp;
-    } on fail error e {
+    } on fail {
         log:printInfo("No previous sync state found. Using configured lastSyncTimestamp.");
         return "";
     }
