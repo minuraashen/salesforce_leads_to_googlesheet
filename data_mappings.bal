@@ -1,4 +1,4 @@
-public function mapLeadToRow(Lead lead) returns SheetRow {
+public function mapLeadToRow(Lead lead) returns SheetRow|error {
     map<int|string|decimal|boolean|float> leadMap = {
         "Id": lead?.Id ?: "",
         "FirstName": lead?.FirstName ?: "",
@@ -28,7 +28,10 @@ public function mapLeadToRow(Lead lead) returns SheetRow {
 
     SheetRow row = [];
     foreach string fieldName in fieldMapping {
-        int|string|decimal|boolean|float fieldValue = leadMap.hasKey(fieldName) ? leadMap.get(fieldName) : "";
+        if !leadMap.hasKey(fieldName) {
+            return error(string `Invalid field name in fieldMapping: "${fieldName}". Supported fields are: ${string:'join(", ", ...leadMap.keys())}`);
+        }
+        int|string|decimal|boolean|float fieldValue = leadMap.get(fieldName);
         row.push(fieldValue);
     }
     return row;

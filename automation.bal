@@ -11,7 +11,7 @@ public function main() returns error? {
         stream<Lead, error?> leadStream = check salesforceClient->query(soqlQuery);
         
         SheetRow[] leadValues = check from Lead lead in leadStream 
-                                      select mapLeadToRow(lead);
+                                      select check mapLeadToRow(lead);
         
         if leadValues.length() <= 0 {
             log:printWarn("No leads found matching the query criteria.");
