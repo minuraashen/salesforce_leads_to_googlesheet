@@ -65,34 +65,39 @@ public function main() returns error? {
 
 function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues, boolean isNewSpreadsheet) returns error? {
     sheets:Sheet targetSheet;
-    string newSheetName;
+    string targetSheetName;
+    boolean includeHeaders = false;
     
     if isNewSpreadsheet {
         sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         sheets:Sheet defaultSheet = spreadsheet.sheets[0];
         
-        string currentTimeStamp = check getFormattedCurrentTimeStamp();
-        newSheetName = string `${sheetName} ${currentTimeStamp}`;
+        targetSheetName = sheetName;
         
         string currentSheetName = defaultSheet.properties.title;
-        _ = check sheetsClient->renameSheet(spreadsheetId, currentSheetName, newSheetName);
-        log:printInfo(string `Renamed default sheet to: ${newSheetName}`);
+        _ = check sheetsClient->renameSheet(spreadsheetId, currentSheetName, targetSheetName);
+        log:printInfo(string `Renamed default sheet to: ${targetSheetName}`);
         
         sheets:Spreadsheet updatedSpreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         targetSheet = updatedSpreadsheet.sheets[0];
+        includeHeaders = true;
     } else {
-        string currentTimeStamp = check getFormattedCurrentTimeStamp();
-        newSheetName = string `${sheetName} ${currentTimeStamp}`;
+        targetSheet = check getOrCreateSheet(spreadsheetId, sheetName);
+        targetSheetName = targetSheet.properties.title;
         
-        targetSheet = check sheetsClient->addSheet(spreadsheetId, newSheetName);
-        log:printInfo(string `Created new sheet: ${newSheetName}`);
+        boolean isEmpty = check isSheetEmpty(spreadsheetId, targetSheetName);
+        includeHeaders = isEmpty;
+        
+        log:printInfo(string `Appending to existing sheet: ${targetSheetName}`);
     }
     
-    SheetRow[] dataToAppend = [columns, ...leadValues];
+    SheetRow[] dataToAppend = includeHeaders ? [columns, ...leadValues] : leadValues;
     
-    _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: targetSheet.properties.title});
+    _ = check sheetsClient->appendValues(spreadsheetId, dataToAppend, {sheetName: targetSheetName});
     
-    check applySheetFormatting(spreadsheetId, targetSheet.properties.sheetId);
+    if includeHeaders {
+        check applySheetFormatting(spreadsheetId, targetSheet.properties.sheetId);
+    }
 }
 
 function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues, boolean isNewSpreadsheet) returns error? {
