@@ -4,8 +4,9 @@ public function getFormattedCurrentTimeStamp() returns string|error {
     time:Zone? zone = time:getZone(timezone);
     if zone is time:Zone {
         time:Civil currentTime = zone.utcToCivil(time:utcNow());
+        int seconds = <int>currentTime.second;
         return string 
-            `${currentTime.year.toString()}-${currentTime.month.toString().padZero(2)}-${currentTime.day.toString().padZero(2)} ${currentTime.hour.toString().padZero(2)}:${currentTime.minute.toString().padZero(2)}:${currentTime.second.toString().padZero(2)}`;
+            `${currentTime.year.toString()}-${currentTime.month.toString().padZero(2)}-${currentTime.day.toString().padZero(2)} ${currentTime.hour.toString().padZero(2)}:${currentTime.minute.toString().padZero(2)}:${seconds.toString().padZero(2)}`;
     }
     return error("Invalid time zone");
 }

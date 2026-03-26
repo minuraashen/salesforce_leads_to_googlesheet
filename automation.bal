@@ -29,7 +29,7 @@ public function main() returns error? {
         log:printInfo(string `Found ${leadValues.length()} lead(s) to export.`);
         
         string workingSpreadsheetId;
-        string targetSheetName = tabName;
+        string targetSheetName = tabName.trim() == "" ? "Leads" : tabName.trim();
         
         if trimmedSpreadsheetId != "" {
             workingSpreadsheetId = trimmedSpreadsheetId;
@@ -57,6 +57,8 @@ public function main() returns error? {
 }
 
 function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues, boolean isNewSpreadsheet) returns error? {
+    string effectiveSheetName = sheetName.trim() == "" ? "Leads" : sheetName.trim();
+    
     sheets:Sheet targetSheet;
     string targetSheetName;
     boolean includeHeaders = false;
@@ -65,17 +67,25 @@ function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValu
         sheets:Spreadsheet spreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         sheets:Sheet defaultSheet = spreadsheet.sheets[0];
         
-        targetSheetName = sheetName;
-        
         string currentSheetName = defaultSheet.properties.title;
-        _ = check sheetsClient->renameSheet(spreadsheetId, currentSheetName, targetSheetName);
-        log:printInfo(string `Renamed default sheet to: ${targetSheetName}`);
+        
+        log:printInfo(string `New spreadsheet created. Default sheet name: "${currentSheetName}", Target sheet name: "${effectiveSheetName}"`);
+        
+        if currentSheetName == "" || currentSheetName != effectiveSheetName {
+            string nameToUse = currentSheetName == "" ? "Sheet1" : currentSheetName;
+            _ = check sheetsClient->renameSheet(spreadsheetId, nameToUse, effectiveSheetName);
+            log:printInfo(string `Renamed default sheet from "${nameToUse}" to: ${effectiveSheetName}`);
+        } else {
+            log:printInfo(string `Sheet already has the correct name: ${effectiveSheetName}`);
+        }
         
         sheets:Spreadsheet updatedSpreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         targetSheet = updatedSpreadsheet.sheets[0];
+        targetSheetName = targetSheet.properties.title;
+        
         includeHeaders = true;
     } else {
-        targetSheet = check getOrCreateSheet(spreadsheetId, sheetName);
+        targetSheet = check getOrCreateSheet(spreadsheetId, effectiveSheetName);
         targetSheetName = targetSheet.properties.title;
         
         boolean isEmpty = check isSheetEmpty(spreadsheetId, targetSheetName);
@@ -94,6 +104,8 @@ function appendLeads(string spreadsheetId, string sheetName, SheetRow[] leadValu
 }
 
 function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] leadValues, boolean isNewSpreadsheet) returns error? {
+    string effectiveSheetName = sheetName.trim() == "" ? "Leads" : sheetName.trim();
+    
     SheetRow[] allValues = [columns, ...leadValues];
     
     if isNewSpreadsheet {
@@ -101,8 +113,9 @@ function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] lea
         sheets:Sheet defaultSheet = spreadsheet.sheets[0];
         
         string currentSheetName = defaultSheet.properties.title;
-        _ = check sheetsClient->renameSheet(spreadsheetId, currentSheetName, sheetName);
-        log:printInfo(string `Renamed default sheet to: ${sheetName}`);
+        string nameToUse = currentSheetName == "" ? "Sheet1" : currentSheetName;
+        _ = check sheetsClient->renameSheet(spreadsheetId, nameToUse, effectiveSheetName);
+        log:printInfo(string `Renamed default sheet to: ${effectiveSheetName}`);
         
         sheets:Spreadsheet updatedSpreadsheet = check sheetsClient->openSpreadsheetById(spreadsheetId);
         sheets:Sheet targetSheet = updatedSpreadsheet.sheets[0];
@@ -116,7 +129,7 @@ function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] lea
         log:printInfo(string `Replacing all ${spreadsheet.sheets.length()} existing sheet(s) in the spreadsheet.`);
         
         string currentTimeStamp = check getFormattedCurrentTimeStamp();
-        string tempSheetName = string `${sheetName}_temp_${currentTimeStamp}`;
+        string tempSheetName = string `${effectiveSheetName}_temp_${currentTimeStamp}`;
         sheets:Sheet tempSheet = check sheetsClient->addSheet(spreadsheetId, tempSheetName);
         
         _ = check sheetsClient->appendValues(spreadsheetId, allValues, {sheetName: tempSheet.properties.title});
@@ -132,14 +145,16 @@ function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] lea
             return e;
         }
         
-        _ = check sheetsClient->renameSheet(spreadsheetId, tempSheet.properties.title, sheetName);
+        _ = check sheetsClient->renameSheet(spreadsheetId, tempSheet.properties.title, effectiveSheetName);
         
-        log:printInfo(string `All existing sheets replaced. Created fresh sheet: ${sheetName}`);
+        log:printInfo(string `All existing sheets replaced. Created fresh sheet: ${effectiveSheetName}`);
     }
 }
 
 function upsertLeadsByEmail(string spreadsheetId, string sheetName, SheetRow[] leadValues) returns error? {
-    sheets:Sheet sheet = check getOrCreateSheet(spreadsheetId, sheetName);
+    string effectiveSheetName = sheetName.trim() == "" ? "Leads" : sheetName.trim();
+    
+    sheets:Sheet sheet = check getOrCreateSheet(spreadsheetId, effectiveSheetName);
     
     boolean isEmpty = check isSheetEmpty(spreadsheetId, sheet.properties.title);
     
