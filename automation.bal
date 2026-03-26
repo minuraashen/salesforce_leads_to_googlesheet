@@ -9,10 +9,6 @@ public function main() returns error? {
         boolean isNewSpreadsheet = trimmedSpreadsheetId == "";
         SyncMode effectiveSyncMode = syncMode;
         
-        if isNewSpreadsheet && effectiveSyncMode == UPSERT_BY_EMAIL {
-            return error("UPSERT_BY_EMAIL mode requires an existing spreadsheet (spreadsheetId must be provided). This mode updates existing leads by email and cannot work with a new spreadsheet. Use APPEND or FULL_REPLACE mode for new spreadsheets.");
-        }
-        
         string soqlQuery = check buildSoqlQuery();
         log:printInfo("Executing SOQL query: " + soqlQuery);
         
@@ -27,6 +23,10 @@ public function main() returns error? {
         }
         
         log:printInfo(string `Found ${leadValues.length()} lead(s) to export.`);
+        
+        if isNewSpreadsheet && effectiveSyncMode == UPSERT_BY_EMAIL {
+            return error("UPSERT_BY_EMAIL mode requires an existing spreadsheet (spreadsheetId must be provided). This mode updates existing leads by email and cannot work with a new spreadsheet. Use APPEND or FULL_REPLACE mode for new spreadsheets.");
+        }
         
         string workingSpreadsheetId;
         string targetSheetName = tabName.trim() == "" ? "Leads" : tabName.trim();
@@ -140,12 +140,15 @@ function fullReplaceLeads(string spreadsheetId, string sheetName, SheetRow[] lea
             foreach sheets:Sheet sheet in spreadsheet.sheets {
                 _ = check sheetsClient->removeSheet(spreadsheetId, sheet.properties.sheetId);
             }
+            
+            _ = check sheetsClient->renameSheet(spreadsheetId, tempSheet.properties.title, effectiveSheetName);
         } on fail error e {
-            _ = check sheetsClient->removeSheet(spreadsheetId, tempSheet.properties.sheetId);
+            error? cleanupError = sheetsClient->removeSheet(spreadsheetId, tempSheet.properties.sheetId);
+            if cleanupError is error {
+                log:printError(string `Failed to cleanup temp sheet after error: ${cleanupError.message()}`);
+            }
             return e;
         }
-        
-        _ = check sheetsClient->renameSheet(spreadsheetId, tempSheet.properties.title, effectiveSheetName);
         
         log:printInfo(string `All existing sheets replaced. Created fresh sheet: ${effectiveSheetName}`);
     }
