@@ -5,7 +5,7 @@ public function getFormattedCurrentTimeStamp() returns string|error {
     if zone is time:Zone {
         time:Civil currentTime = zone.utcToCivil(time:utcNow());
         return string 
-            `${currentTime.year.toString()}-${currentTime.month.toString().padZero(2)}-${currentTime.day.toString().padZero(2)} ${currentTime.hour.toString().padZero(2)}:${currentTime.minute.toString().padZero(2)}`;
+            `${currentTime.year.toString()}-${currentTime.month.toString().padZero(2)}-${currentTime.day.toString().padZero(2)} ${currentTime.hour.toString().padZero(2)}:${currentTime.minute.toString().padZero(2)}:${currentTime.second.toString().padZero(2)}`;
     }
     return error("Invalid time zone");
 }
@@ -33,6 +33,33 @@ function getTimeframeFilter() returns string|error {
     }
 }
 
+function sanitizeSoqlFilter(string filter) returns string|error {
+    string trimmedFilter = filter.trim();
+    
+    if trimmedFilter == "" {
+        return "";
+    }
+    
+    string lowerFilter = trimmedFilter.toLowerAscii();
+    
+    string[] dangerousKeywords = [
+        "delete",
+        "insert",
+        "update",
+        "merge",
+        "upsert",
+        "undelete"
+    ];
+    
+    foreach string keyword in dangerousKeywords {
+        if lowerFilter.includes(keyword) {
+            return error(string `SOQL filter contains dangerous keyword: "${keyword}". Only SELECT queries are allowed.`);
+        }
+    }
+    
+    return trimmedFilter;
+}
+
 public function buildSoqlQuery() returns string|error {
     string selectClause = string:'join(", ", ...fieldMapping);
     string query = string `SELECT ${selectClause} FROM Lead`;
@@ -49,7 +76,10 @@ public function buildSoqlQuery() returns string|error {
     }
     
     if soqlFilter != "" {
-        whereConditions.push(soqlFilter);
+        string sanitizedFilter = check sanitizeSoqlFilter(soqlFilter);
+        if sanitizedFilter != "" {
+            whereConditions.push(sanitizedFilter);
+        }
     }
     
     if whereConditions.length() > 0 {
